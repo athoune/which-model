@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-which-model = "which_model.cli:app"
+which-model = "which_model.cli:main"
 
 [dependency-groups]
 dev = [

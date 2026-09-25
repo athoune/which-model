@@ -1,0 +1,5 @@
+{
+  "as_of": null,
+  "note": "Curated fallback scores, used when Artificial Analysis has nothing and no override exists. Keys are score short names: coding, agentic, intelligence. Add only citable values; the app never invents a score.",
+  "models": {}
+}
