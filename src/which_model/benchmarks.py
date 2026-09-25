@@ -20,7 +20,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .catalog import slugify
-from .schemas import BenchmarkRecord, Catalog
+from .schemas import BenchmarkRecord, Catalog, ModelRecord
 from .sources.artificial_analysis import AAEntry
 
 SEED_PATH = Path("data/benchmarks.seed.json")
@@ -53,7 +53,7 @@ def _as_override(value: Override | dict[str, float]) -> Override:
 def load_seed(path: Path = SEED_PATH) -> dict[str, dict[str, float]]:
     if not path.exists():
         return {}
-    payload = json.loads(path.read_text())
+    payload = json.loads(path.read_text(encoding="utf-8"))
     return {
         name: {k: float(v) for k, v in entry.get("scores", entry).items() if isinstance(v, (int, float))}
         for name, entry in payload.get("models", {}).items()
@@ -65,7 +65,7 @@ def load_overrides(directory: Path = OVERRIDES_DIR) -> dict[str, Override]:
         return {}
     overrides: dict[str, Override] = {}
     for path in sorted(directory.glob("*.json")):
-        payload = json.loads(path.read_text())
+        payload = json.loads(path.read_text(encoding="utf-8"))
         name = payload.get("model_name") or path.stem
         scores = payload.get("scores", payload)
         overrides[name] = Override(
@@ -92,7 +92,7 @@ def _as_text(value: object) -> str | None:
 def load_aliases(path: Path = ALIASES_PATH) -> dict[str, str]:
     if not path.exists():
         return {}
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def index_aa(entries: list[AAEntry]) -> dict[str, AAEntry]:
@@ -125,6 +125,18 @@ def _aa_indexes(aa_entries: list[AAEntry]) -> tuple[dict[str, AAEntry], dict[str
     return aa_index, short_index
 
 
+@dataclass
+class _Resolver:
+    """The immutable sources a single model is resolved against."""
+
+    seed: dict[str, dict[str, float]]
+    curated: dict[str, Override]
+    aa_index: dict[str, AAEntry]
+    short_index: dict[str, list[AAEntry]]
+    aliases: dict[str, str]
+    today: date
+
+
 def resolve(
     catalog: Catalog,
     aa_entries: list[AAEntry],
@@ -133,63 +145,83 @@ def resolve(
     overrides: dict[str, Override | dict[str, float]] | None = None,
     aliases: dict[str, str] | None = None,
 ) -> Resolution:
-    seed = seed or {}
-    curated = {name: _as_override(value) for name, value in (overrides or {}).items()}
-    aliases = aliases or {}
-    today = datetime.now(UTC).date()
     aa_index, short_index = _aa_indexes(aa_entries)
+    resolver = _Resolver(
+        seed=seed or {},
+        curated={name: _as_override(value) for name, value in (overrides or {}).items()},
+        aa_index=aa_index,
+        short_index=short_index,
+        aliases=aliases or {},
+        today=datetime.now(UTC).date(),
+    )
 
     resolution = Resolution(aa_available=bool(aa_entries))
-
     for record in catalog.models:
-        merged: dict[str, float] = {}
-        contributors: list[str] = []
-        override = curated.get(record.name)
-
-        if record.name in seed:
-            merged.update(seed[record.name])
-            contributors.append("seed")
-
-        match = _match_aa(record.name, record.model_id, aa_index, short_index, aliases)
-        if match is not None:
-            merged.update(match.scores)
-            contributors.append("artificial_analysis")
+        benchmark, matched = _resolve_record(record, resolver)
+        if matched:
             resolution.aa_matched += 1
+        if benchmark is None:
+            resolution.unresolved.append(record.name)
+        else:
+            resolution.records[record.name] = benchmark
+    return resolution
 
+
+def _resolve_record(record: ModelRecord, resolver: _Resolver) -> tuple[BenchmarkRecord | None, bool]:
+    """Merge seed, Artificial Analysis and the override for one model.
+
+    Returns ``(record, aa_matched)``. ``record`` is ``None`` when nothing
+    resolved at all, which the caller reports as unresolved rather than
+    inventing an answer.
+    """
+    merged: dict[str, float] = {}
+    contributors: list[str] = []
+    override = resolver.curated.get(record.name)
+
+    if record.name in resolver.seed:
+        merged.update(resolver.seed[record.name])
+        contributors.append("seed")
+
+    match = _match_aa(record.name, record.model_id, resolver.aa_index, resolver.short_index, resolver.aliases)
+    if match is not None:
+        merged.update(match.scores)
+        contributors.append("artificial_analysis")
+
+    if override is not None:
+        merged.update(override.scores)
+        contributors.append("override")
+
+    # Prefer the date the answer was read over the date of this run.
+    as_of = (override.as_of if override is not None else None) or resolver.today
+
+    if not merged:
         if override is not None:
-            merged.update(override.scores)
-            contributors.append("override")
-
-        # Prefer the date the answer was read over the date of this run.
-        as_of = (override.as_of if override is not None else None) or today
-
-        if not merged:
-            if override is not None:
-                # The agent investigated and found nothing citable. Record it
-                # so the model is not requested forever, but keep the scores
-                # empty: nothing is invented.
-                resolution.records[record.name] = BenchmarkRecord(
+            # The agent investigated and found nothing citable. Record it so
+            # the model is not requested forever, but keep the scores empty:
+            # nothing is invented.
+            return (
+                BenchmarkRecord(
                     model_name=record.name,
                     scores={},
                     source="not_found",
                     as_of=as_of,
                     confidence="override",
-                )
-                continue
-            resolution.unresolved.append(record.name)
-            continue
+                ),
+                False,
+            )
+        return None, False
 
-        source = "mixed" if len(contributors) > 1 else contributors[0]
-        resolution.records[record.name] = BenchmarkRecord(
+    return (
+        BenchmarkRecord(
             model_name=record.name,
             scores=merged,
-            source=source,
+            source="mixed" if len(contributors) > 1 else contributors[0],
             matched_slug=match.slug if match else None,
             as_of=as_of,
             confidence="override" if "override" in contributors else "auto",
-        )
-
-    return resolution
+        ),
+        match is not None,
+    )
 
 
 def _match_aa(

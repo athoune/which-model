@@ -9,6 +9,7 @@ Three verbs, in order of how often you use them:
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -51,8 +52,6 @@ def refresh(
     ttl_hours: float = typer.Option(12.0, "--ttl-hours", help="Cache lifetime in hours."),
 ) -> None:
     """Fetch the sources, rebuild the catalog, and write the cache."""
-    from datetime import timedelta
-
     base_dir = _base_dir()
     snapshot = pipeline.refresh(base_dir, force=force, ttl=timedelta(hours=ttl_hours))
 

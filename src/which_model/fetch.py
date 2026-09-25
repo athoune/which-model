@@ -55,10 +55,10 @@ class Fetcher:
         if not (meta_path.exists() and body_path.exists()):
             return None
         try:
-            meta = json.loads(meta_path.read_text())
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
             return Fetched(
                 url=url,
-                text=body_path.read_text(),
+                text=body_path.read_text(encoding="utf-8"),
                 fetched_at=datetime.fromisoformat(meta["fetched_at"]),
                 sha256=meta["sha256"],
                 from_cache=True,
@@ -68,13 +68,13 @@ class Fetcher:
 
     def _write_cache(self, url: str, text: str, fetched_at: datetime) -> None:
         meta_path, body_path = self._paths(url)
-        body_path.write_text(text)
+        body_path.write_text(text, encoding="utf-8")
         meta = {
             "url": url,
             "fetched_at": fetched_at.isoformat(),
             "sha256": hashlib.sha256(text.encode()).hexdigest(),
         }
-        meta_path.write_text(json.dumps(meta))
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
 
     def get(self, url: str, *, force: bool = False, headers: dict[str, str] | None = None) -> Fetched:
         cached = self._read_cache(url)

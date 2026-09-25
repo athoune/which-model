@@ -36,5 +36,11 @@ addopts = "-q"
 line-length = 120
 target-version = "py312"
 
+[tool.pylint.main]
+# Prospector runs from its own virtualenv, which does not necessarily have the
+# project's runtime dependencies installed. typer is a declared dependency,
+# imported for real by the CLI, not a typo.
+ignored-modules = ["typer"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DTZ", "SIM"]

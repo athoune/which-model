@@ -17,8 +17,9 @@ import httpx
 
 from . import agent, benchmarks
 from . import catalog as catalog_mod
-from .fetch import Fetcher
-from .schemas import AgentRequest, BenchmarkRecord, Catalog, GoDocs
+from .docs import parse_go_docs
+from .fetch import Fetched, Fetcher
+from .schemas import AgentRequest, BenchmarkRecord, Catalog
 from .sources import artificial_analysis as aa_mod
 from .sources import models_dev, zen
 
@@ -50,26 +51,19 @@ def refresh(
     warnings: list[str] = []
     fetcher = Fetcher(base_dir / "data" / "cache", ttl=ttl)
 
-    docs_fetch = fetcher.get(DOCS_URL, force=force)
-    dev_fetch = fetcher.get(models_dev.URL, force=force)
-    zen_fetch = fetcher.get(zen.URL, force=force)
-    for fetched in (docs_fetch, dev_fetch, zen_fetch):
-        if fetched.stale:
-            warnings.append(f"using stale cache for {fetched.url}")
-
-    docs = _parse_docs(docs_fetch.text, docs_fetch.sha256)
-    dev_models = models_dev.load(dev_fetch.text)
-    served = zen.load(zen_fetch.text)
+    sources = _fetch_sources(fetcher, force=force, warnings=warnings)
+    docs = parse_go_docs(sources["docs"].text, source_url=DOCS_URL, source_ref=sources["docs"].sha256)
+    dev_models = models_dev.load(sources["models_dev"].text)
 
     cat = catalog_mod.build_catalog(
         docs,
         dev_models,
-        served,
+        zen.load(sources["zen"].text),
         refs={
             "docs_url": DOCS_URL,
-            "docs_sha256": docs_fetch.sha256,
-            "models_dev_sha256": dev_fetch.sha256,
-            "zen_sha256": zen_fetch.sha256,
+            "docs_sha256": sources["docs"].sha256,
+            "models_dev_sha256": sources["models_dev"].sha256,
+            "zen_sha256": sources["zen"].sha256,
             "built_at": now.isoformat(),
         },
     )
@@ -97,10 +91,17 @@ def refresh(
     return snapshot
 
 
-def _parse_docs(text: str, sha256: str) -> GoDocs:
-    from .docs import parse_go_docs
-
-    return parse_go_docs(text, source_url=DOCS_URL, source_ref=sha256)
+def _fetch_sources(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> dict[str, Fetched]:
+    """Fetch the three deterministic sources, reporting stale fallbacks."""
+    sources = {
+        "docs": fetcher.get(DOCS_URL, force=force),
+        "models_dev": fetcher.get(models_dev.URL, force=force),
+        "zen": fetcher.get(zen.URL, force=force),
+    }
+    for fetched in sources.values():
+        if fetched.stale:
+            warnings.append(f"using stale cache for {fetched.url}")
+    return sources
 
 
 def _load_aa(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> tuple[list, bool]:
@@ -126,46 +127,48 @@ def _load_aa(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> tuple[lis
     return entries, True
 
 
+def _write_json(path: Path, payload: str) -> None:
+    path.write_text(payload, encoding="utf-8")
+
+
 def _write(base_dir: Path, snapshot: Snapshot, now: datetime) -> None:
     data_dir = base_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "catalog.json").write_text(snapshot.catalog.model_dump_json(indent=2))
-    (data_dir / "benchmarks.json").write_text(
-        json.dumps({name: rec.model_dump(mode="json") for name, rec in snapshot.benchmarks.items()}, indent=2)
+    benchmarks_json = json.dumps(
+        {name: rec.model_dump(mode="json") for name, rec in snapshot.benchmarks.items()}, indent=2
     )
-    (data_dir / "meta.json").write_text(
-        json.dumps(
-            {
-                "built_at": now.isoformat(),
-                "warnings": snapshot.warnings,
-                "aa_available": snapshot.aa_available,
-                "resolved": len(snapshot.benchmarks),
-                "pending": len(snapshot.requests),
-            },
-            indent=2,
-        )
+    meta_json = json.dumps(
+        {
+            "built_at": now.isoformat(),
+            "warnings": snapshot.warnings,
+            "aa_available": snapshot.aa_available,
+            "resolved": len(snapshot.benchmarks),
+            "pending": len(snapshot.requests),
+        },
+        indent=2,
     )
+    _write_json(data_dir / "catalog.json", snapshot.catalog.model_dump_json(indent=2))
+    _write_json(data_dir / "benchmarks.json", benchmarks_json)
+    _write_json(data_dir / "meta.json", meta_json)
 
     day_dir = base_dir / SNAPSHOT_DIR / now.strftime("%Y-%m-%d")
     day_dir.mkdir(parents=True, exist_ok=True)
-    (day_dir / "catalog.json").write_text(snapshot.catalog.model_dump_json(indent=2))
-    (day_dir / "benchmarks.json").write_text(
-        json.dumps({name: rec.model_dump(mode="json") for name, rec in snapshot.benchmarks.items()}, indent=2)
-    )
+    _write_json(day_dir / "catalog.json", snapshot.catalog.model_dump_json(indent=2))
+    _write_json(day_dir / "benchmarks.json", benchmarks_json)
 
 
 def load_catalog(base_dir: Path = Path(".")) -> Catalog | None:
     path = base_dir / CATALOG_PATH
     if not path.exists():
         return None
-    return Catalog.model_validate_json(path.read_text())
+    return Catalog.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 def load_benchmarks(base_dir: Path = Path(".")) -> dict[str, BenchmarkRecord]:
     path = base_dir / BENCHMARKS_PATH
     if not path.exists():
         return {}
-    raw = json.loads(path.read_text())
+    raw = json.loads(path.read_text(encoding="utf-8"))
     return {name: BenchmarkRecord.model_validate(entry) for name, entry in raw.items()}
 
 

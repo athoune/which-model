@@ -271,8 +271,8 @@ def write_requests(requests: list[AgentRequest], directory: Path = REQUEST_DIR) 
     written: list[Path] = []
     for request in requests:
         path = directory / f"{slug(request.model_name)}.md"
-        path.write_text(render_request(request))
+        path.write_text(render_request(request), encoding="utf-8")
         written.append(path)
 
-    (directory / WORKLIST_NAME).write_text(render_worklist(requests))
+    (directory / WORKLIST_NAME).write_text(render_worklist(requests), encoding="utf-8")
     return written

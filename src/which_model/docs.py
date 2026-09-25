@@ -207,23 +207,40 @@ def _table_by_header(tables: list[Table], *needles: str) -> Table | None:
     return None
 
 
+def _ensure(models: dict[str, DocsModel], name: str) -> DocsModel:
+    return models.setdefault(name, DocsModel(name=name))
+
+
 def parse_go_docs(body: str, source_url: str, source_ref: str | None = None) -> GoDocs:
     tables = parse_tables(body)
-
     pricing = _table_by_header(tables, "Input", "Monthly limit")
-    requests_table = _table_by_header(tables, "requests per 5 hour")
-    endpoints = _table_by_header(tables, "Model ID")
-    privacy = _table_by_header(tables, "Model training")
-
     if pricing is None:
         raise ValueError("pricing table not found in docs source")
 
     models: dict[str, DocsModel] = {}
+    _ingest_pricing(models, pricing)
 
-    def ensure(name: str) -> DocsModel:
-        return models.setdefault(name, DocsModel(name=name))
+    requests_table = _table_by_header(tables, "requests per 5 hour")
+    if requests_table is not None:
+        _ingest_requests(models, requests_table)
 
-    for row in pricing.rows:
+    endpoints = _table_by_header(tables, "Model ID")
+    if endpoints is not None:
+        _ingest_endpoints(models, endpoints)
+
+    privacy = _table_by_header(tables, "Model training")
+    if privacy is not None:
+        _ingest_privacy(models, privacy)
+
+    for name in _extract_listed_models(body):
+        _ensure(models, name).listed = True
+
+    _attach_profiles(body, models)
+    return GoDocs(source_url=source_url, source_ref=source_ref, models=list(models.values()))
+
+
+def _ingest_pricing(models: dict[str, DocsModel], table: Table) -> None:
+    for row in table.rows:
         raw_name = row[0]
         name, qualifier = split_model_cell(raw_name)
         input_usd, free = parse_price(row[1])
@@ -231,7 +248,7 @@ def parse_go_docs(body: str, source_url: str, source_ref: str | None = None) -> 
         cache_read, _ = parse_price(row[3])
         cache_write, _ = parse_price(row[4])
         limit = parse_limit(row[5])
-        ensure(name).rows.append(
+        _ensure(models, name).rows.append(
             PricingRow(
                 raw_name=T.strip_html(raw_name),
                 name=name,
@@ -245,41 +262,36 @@ def parse_go_docs(body: str, source_url: str, source_ref: str | None = None) -> 
             )
         )
 
-    if requests_table is not None:
-        for row in requests_table.rows:
-            name = T.strip_html(re.split(r"<br\s*/?>", row[0])[0])
-            per_5h, per_5h_prev, unlimited = parse_requests_cell(row[1])
-            per_week, per_week_prev, _ = parse_requests_cell(row[2])
-            per_month, per_month_prev, _ = parse_requests_cell(row[3])
-            ensure(name).requests = RequestsEstimate(
-                per_5h=per_5h,
-                per_week=per_week,
-                per_month=per_month,
-                per_5h_previous=per_5h_prev,
-                per_week_previous=per_week_prev,
-                per_month_previous=per_month_prev,
-                unlimited=unlimited,
-            )
 
-    if endpoints is not None:
-        for row in endpoints.rows:
-            name = T.strip_html(row[0])
-            model = ensure(name)
-            model.model_id = T.clean(row[1])
-            model.endpoint = T.clean(row[2])
+def _ingest_requests(models: dict[str, DocsModel], table: Table) -> None:
+    for row in table.rows:
+        name = T.strip_html(re.split(r"<br\s*/?>", row[0])[0])
+        per_5h, per_5h_prev, unlimited = parse_requests_cell(row[1])
+        per_week, per_week_prev, _ = parse_requests_cell(row[2])
+        per_month, per_month_prev, _ = parse_requests_cell(row[3])
+        _ensure(models, name).requests = RequestsEstimate(
+            per_5h=per_5h,
+            per_week=per_week,
+            per_month=per_month,
+            per_5h_previous=per_5h_prev,
+            per_week_previous=per_week_prev,
+            per_month_previous=per_month_prev,
+            unlimited=unlimited,
+        )
 
-    if privacy is not None:
-        for row in privacy.rows:
-            model = ensure(T.strip_html(row[0]))
-            model.privacy_training = T.clean(row[1])
-            model.privacy_retention = T.clean(row[2])
 
-    for name in _extract_listed_models(body):
-        ensure(name).listed = True
+def _ingest_endpoints(models: dict[str, DocsModel], table: Table) -> None:
+    for row in table.rows:
+        model = _ensure(models, T.strip_html(row[0]))
+        model.model_id = T.clean(row[1])
+        model.endpoint = T.clean(row[2])
 
-    _attach_profiles(body, models)
 
-    return GoDocs(source_url=source_url, source_ref=source_ref, models=list(models.values()))
+def _ingest_privacy(models: dict[str, DocsModel], table: Table) -> None:
+    for row in table.rows:
+        model = _ensure(models, T.strip_html(row[0]))
+        model.privacy_training = T.clean(row[1])
+        model.privacy_retention = T.clean(row[2])
 
 
 def _attach_profiles(body: str, models: dict[str, DocsModel]) -> None:
