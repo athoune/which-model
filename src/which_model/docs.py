@@ -9,7 +9,7 @@ use (``<br />``, ``<small>``, ``**bold**``, ``~~struck~~``).
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from . import text as T
 from .schemas import (
@@ -140,9 +140,11 @@ def _promo_date(raw: str, reference: date | None = None) -> date | None:
     match = re.search(r"Ends\s+([A-Z][a-z]{2})\s+(\d{1,2})", T.strip_html(raw))
     if not match:
         return None
-    reference = reference or datetime.now().date()
+    reference = reference or datetime.now(UTC).date()
     try:
-        parsed = datetime.strptime(f"{match.group(1)} {match.group(2)} {reference.year}", "%b %d %Y").date()
+        parsed = datetime.strptime(
+            f"{match.group(1)} {match.group(2)} {reference.year}", "%b %d %Y"
+        ).replace(tzinfo=UTC).date()
     except ValueError:
         return None
     # A promo that "ended" months ago is really next year's edition.

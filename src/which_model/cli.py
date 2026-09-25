@@ -18,7 +18,6 @@ from rich.console import Console
 
 from . import agent, pipeline
 from . import report as dashboard
-from .schemas import Catalog
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 console = Console()

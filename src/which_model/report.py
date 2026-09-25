@@ -7,7 +7,7 @@ agrees with the others.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from statistics import median
 
 from rich.console import Console, Group

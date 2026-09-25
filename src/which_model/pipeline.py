@@ -10,10 +10,11 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import agent, benchmarks, catalog as catalog_mod
+from . import agent, benchmarks
+from . import catalog as catalog_mod
 from .fetch import Fetcher
 from .schemas import AgentRequest, BenchmarkRecord, Catalog, GoDocs
 from .sources import artificial_analysis as aa_mod
@@ -43,7 +44,7 @@ def refresh(
     ttl: timedelta = timedelta(hours=12),
     now: datetime | None = None,
 ) -> Snapshot:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     warnings: list[str] = []
     fetcher = Fetcher(base_dir / "data" / "cache", ttl=ttl)
 

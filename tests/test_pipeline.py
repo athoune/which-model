@@ -8,7 +8,7 @@ set of agent requests.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from which_model import pipeline
@@ -74,7 +74,7 @@ class FakeFetcher:
         return Fetched(
             url=url,
             text=text,
-            fetched_at=datetime(2026, 9, 25, tzinfo=timezone.utc),
+            fetched_at=datetime(2026, 9, 25, tzinfo=UTC),
             sha256="deadbeef",
             from_cache=False,
         )
@@ -107,7 +107,7 @@ def test_refresh_with_aa_key_resolves_scores_and_shrinks_the_queue(monkeypatch, 
     monkeypatch.setattr(pipeline, "Fetcher", FakeFetcher)
     monkeypatch.setenv("AA_API_KEY", "test-key")
 
-    snapshot = pipeline.refresh(tmp_path, now=datetime(2026, 9, 25, tzinfo=timezone.utc))
+    snapshot = pipeline.refresh(tmp_path, now=datetime(2026, 9, 25, tzinfo=UTC))
 
     assert snapshot.aa_available is True
     assert snapshot.benchmarks["GLM-5.3-Flash"].scores["coding"] == 50.0

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .catalog import slugify
@@ -120,7 +120,7 @@ def resolve(
             scores=merged,
             source=source,
             matched_slug=match.slug if match else None,
-            as_of=date.today(),
+            as_of=datetime.now(UTC).date(),
             confidence="override" if "override" in contributors else "auto",
         )
 

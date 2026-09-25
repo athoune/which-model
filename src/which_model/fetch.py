@@ -12,7 +12,7 @@ import hashlib
 import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -66,14 +66,17 @@ class Fetcher:
     def _write_cache(self, url: str, text: str, fetched_at: datetime) -> None:
         meta_path, body_path = self._paths(url)
         body_path.write_text(text)
-        meta_path.write_text(
-            json.dumps({"url": url, "fetched_at": fetched_at.isoformat(), "sha256": hashlib.sha256(text.encode()).hexdigest()})
-        )
+        meta = {
+            "url": url,
+            "fetched_at": fetched_at.isoformat(),
+            "sha256": hashlib.sha256(text.encode()).hexdigest(),
+        }
+        meta_path.write_text(json.dumps(meta))
 
     def get(self, url: str, *, force: bool = False, headers: dict[str, str] | None = None) -> Fetched:
         cached = self._read_cache(url)
         if cached is not None and not force:
-            age = datetime.now(timezone.utc) - cached.fetched_at
+            age = datetime.now(UTC) - cached.fetched_at
             if age <= self.ttl:
                 return cached
 
@@ -94,7 +97,7 @@ class Fetcher:
                 return cached
             raise
 
-        fetched_at = datetime.now(timezone.utc)
+        fetched_at = datetime.now(UTC)
         self._write_cache(url, response.text, fetched_at)
         return Fetched(
             url=url,

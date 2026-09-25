@@ -7,23 +7,23 @@ Go rows can be split by context window or by peak/off-peak, and a naive
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from enum import Enum
+from datetime import UTC, date, datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
-class QualifierKind(str, Enum):
+class QualifierKind(StrEnum):
     NONE = "none"
     CONTEXT = "context"
     PERIOD = "period"
 
 
-class Period(str, Enum):
+class Period(StrEnum):
     PEAK = "peak"
     OFF_PEAK = "off_peak"
 
