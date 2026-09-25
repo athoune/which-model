@@ -57,9 +57,12 @@ def refresh(
     base_dir = _base_dir()
     snapshot = pipeline.refresh(base_dir, force=force, ttl=timedelta(hours=ttl_hours))
 
+    scored = sum(1 for record in snapshot.benchmarks.values() if record.scores)
+    not_found = sum(1 for record in snapshot.benchmarks.values() if record.source == "not_found")
     console.print(
         f"[bold]{len(snapshot.catalog.models)}[/bold] models  ·  "
-        f"{len(snapshot.benchmarks)} with scores  ·  "
+        f"{scored} with scores  ·  "
+        f"{not_found} searched, none citable  ·  "
         f"{len(snapshot.requests)} awaiting an agent"
     )
     if not snapshot.aa_available:
