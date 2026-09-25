@@ -111,6 +111,65 @@ def _assign_tiers(rows: list[Row]) -> None:
 
 # --- rendering -------------------------------------------------------------
 
+# Shared explanation for the star prefix, used by every view that ranks models.
+STAR_LEGEND = "★  Pareto frontier: no other model is both cheaper AND better scored"
+
+BUDGET_LEGEND = (
+    ("Model", "model name; a ★ prefix marks the Pareto frontier (see above)"),
+    ("Allow $", "monthly included usage for that model: $15, $30, $60 or unlimited"),
+    ("In/Out $/M", "token price per million tokens, input / output"),
+    ("Verb", "verbosity index: 100 = median output length across models"),
+    ("$/task", "cost of ONE task, counted in allowance dollars — not money you pay"),
+    ("tasks/5h", "tasks that fit in the 5-hour window (20% of the allowance)"),
+    ("tasks/mo", "tasks that fit in the monthly window (100% of the allowance)"),
+    ("coding", "benchmark score, 0-100. '-' = not resolved yet"),
+    ("agentic", "benchmark score, 0-100. '-' = not resolved yet"),
+    ("source", "where the score comes from: see the source legend below"),
+)
+
+VERBOSITY_LEGEND = (
+    ("out tok/task", "average output tokens per request: the verbosity signal"),
+    ("index", "same value normalised, 100 = median output length across models"),
+    ("share of cost", "split of one task's cost: in = fresh input, cache = cached input, out = output"),
+    ("$/task", "cost of one task in allowance dollars"),
+    ("$/task x2 out", "same task with twice the output length"),
+    ("cost rise", "how much more that would cost"),
+)
+
+PERF_LEGEND = (
+    ("Tier", "performance tier: scores within 2 points share a tier, because gaps that small are noise"),
+    ("coding", "coding benchmark score, 0-100"),
+    ("agentic", "agentic/tool-use benchmark score, 0-100"),
+    ("$/task", "cost of one task in allowance dollars"),
+    ("tasks/mo", "tasks that fit in the monthly allowance"),
+    ("source", "where the score comes from: see the source legend below"),
+)
+
+SOURCE_LEGEND = (
+    "source: aa = Artificial Analysis · seed = curated seed · override = human/agent · "
+    "n/a = searched, nothing citable · mixed = several of these"
+)
+
+
+def _legend(view: str, baseline: int | None) -> Panel:
+    entries = {
+        "budget": BUDGET_LEGEND,
+        "verbosity": VERBOSITY_LEGEND,
+        "perf": PERF_LEGEND,
+    }[view]
+    width = max(len(label) for label, _ in entries)
+    lines = [
+        STAR_LEGEND,
+        "",
+        *[f"[bold]{label.ljust(width)}[/bold]  {text}" for label, text in entries],
+        "",
+        SOURCE_LEGEND,
+    ]
+    if baseline:
+        lines.append(f"verbosity baseline: 100 on the index = {baseline} output tokens per task")
+    return Panel(Group(*[Text.from_markup(line) for line in lines]), title="Legend", border_style="dim")
+
+
 
 def _task_cost(value: float | None) -> str:
     """Adaptive precision: a task costs fractions of a cent."""
@@ -152,6 +211,7 @@ def render(console: Console, rows: list[Row], baseline: int | None, view: str, p
         console.print(_perf_table(rows))
     else:
         raise ValueError(f"unknown view {view!r}")
+    console.print(_legend(view, baseline))
 
 
 def _header(rows: list[Row], baseline: int | None, pending: int) -> Panel:
@@ -180,14 +240,14 @@ def _budget_table(rows: list[Row]) -> Table:
         expand=False,
     )
     table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
-    table.add_column("Allow", justify="right", no_wrap=True)
-    table.add_column("$/M in/out", justify="right", no_wrap=True, style="dim")
+    table.add_column("Allow $", justify="right", no_wrap=True)
+    table.add_column("In/Out $/M", justify="right", no_wrap=True, style="dim")
     table.add_column("Verb", justify="right", no_wrap=True)
     table.add_column("$/task", justify="right", no_wrap=True)
-    table.add_column("5h", justify="right", no_wrap=True)
-    table.add_column("/mo", justify="right", no_wrap=True)
+    table.add_column("tasks/5h", justify="right", no_wrap=True)
+    table.add_column("tasks/mo", justify="right", no_wrap=True)
     table.add_column("coding", justify="right", no_wrap=True, style="magenta")
-    table.add_column("src", no_wrap=True, style="dim")
+    table.add_column("source", no_wrap=True, style="dim")
 
     for row in sorted(rows, key=lambda r: (r.tasks_month is None, -(r.tasks_month or 0))):
         pricing = row.row
@@ -274,8 +334,8 @@ def _perf_table(rows: list[Row]) -> Table:
     table.add_column("coding", justify="right", no_wrap=True)
     table.add_column("agentic", justify="right", no_wrap=True)
     table.add_column("$/task", justify="right", no_wrap=True)
-    table.add_column("/mo", justify="right", no_wrap=True)
-    table.add_column("src", style="dim", no_wrap=True)
+    table.add_column("tasks/mo", justify="right", no_wrap=True)
+    table.add_column("source", style="dim", no_wrap=True)
 
     ranked = sorted(
         (r for r in rows if r.benchmark),

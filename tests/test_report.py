@@ -107,6 +107,21 @@ def test_every_view_renders():
         assert "Cheap Great" in output
 
 
+def test_legend_explains_the_star_and_every_column():
+    legends = {
+        "budget": report.BUDGET_LEGEND,
+        "verbosity": report.VERBOSITY_LEGEND,
+        "perf": report.PERF_LEGEND,
+    }
+    for view, entries in legends.items():
+        output = _render(view)
+        assert "Pareto frontier" in output
+        assert "Legend" in output
+        # Every abbreviated header must be spelled out in the legend.
+        for label, _ in entries:
+            assert label in output, (view, label)
+
+
 def test_provenance_view_renders_reconciliation():
     catalog, _ = sample_catalog()
     catalog.served_undocumented = ["legacy-model"]
