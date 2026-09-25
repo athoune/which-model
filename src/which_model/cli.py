@@ -97,6 +97,10 @@ def report(
     if width > 0:
         console.width = width
 
+    if offline and force:
+        err_console.print("[red]--offline and --force are mutually exclusive.[/red]")
+        raise typer.Exit(code=2)
+
     base_dir = _base_dir()
     snapshot = _current(base_dir, refresh=not offline, force=force)
     rows, baseline = dashboard.build_rows(snapshot.catalog, snapshot.benchmarks)
