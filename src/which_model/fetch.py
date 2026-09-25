@@ -54,14 +54,17 @@ class Fetcher:
         meta_path, body_path = self._paths(url)
         if not (meta_path.exists() and body_path.exists()):
             return None
-        meta = json.loads(meta_path.read_text())
-        return Fetched(
-            url=url,
-            text=body_path.read_text(),
-            fetched_at=datetime.fromisoformat(meta["fetched_at"]),
-            sha256=meta["sha256"],
-            from_cache=True,
-        )
+        try:
+            meta = json.loads(meta_path.read_text())
+            return Fetched(
+                url=url,
+                text=body_path.read_text(),
+                fetched_at=datetime.fromisoformat(meta["fetched_at"]),
+                sha256=meta["sha256"],
+                from_cache=True,
+            )
+        except (OSError, json.JSONDecodeError, KeyError, ValueError, TypeError):
+            return None
 
     def _write_cache(self, url: str, text: str, fetched_at: datetime) -> None:
         meta_path, body_path = self._paths(url)
