@@ -1,9 +1,0 @@
-{
-  "model_name": "GPT 6 Luna",
-  "scores": {
-    "agentic": 30.3,
-    "intelligence": 37
-  },
-  "source": "AA Agentic Index: https://benchlm.ai/benchmarks/aaagenticindex (~30.3%), AA Intelligence Index: https://artificialanalysis.ai/models/gpt-6-luna (37). Coding: not found after thorough search of AA Coding Index (https://benchlm.ai/benchmarks/aacodingindex, 102 models listed, GPT-6 Luna not present) and other sources.",
-  "as_of": "2026-09-25"
-}

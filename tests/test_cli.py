@@ -62,3 +62,74 @@ def test_check_json_emits_one_parseable_document(tmp_path, monkeypatch):
     payload = json.loads(result.stdout)
     assert isinstance(payload, list)
     assert payload[0]["model_name"] == "Solo"
+
+
+def test_verify_flags_an_override_that_contradicts_aa(tmp_path, monkeypatch):
+    from which_model import pipeline
+    from which_model.sources.artificial_analysis import AAEntry
+
+    monkeypatch.chdir(tmp_path)
+    data = tmp_path / "data"
+    (data / "overrides").mkdir(parents=True)
+    catalog = Catalog(
+        models=[
+            ModelRecord(
+                name="Solo",
+                model_id="solo-model",
+                rows=[PricingRow(raw_name="Solo", name="Solo", input_usd=1.0)],
+            )
+        ]
+    )
+    (data / "catalog.json").write_text(catalog.model_dump_json())
+    (data / "overrides" / "solo.json").write_text(
+        json.dumps({"model_name": "Solo", "scores": {"coding": 99.0}})
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "load_aa_entries",
+        lambda *args, **kwargs: (
+            [AAEntry(slug="solo-model", name="Solo", scores={"coding": 50.0})],
+            True,
+            [],
+        ),
+    )
+
+    result = runner.invoke(app, ["verify"])
+
+    assert result.exit_code == 1
+    assert "contradiction" in result.output.lower()
+    assert "override=99" in result.output
+    assert "AA=50" in result.output
+
+
+def test_verify_passes_when_every_override_agrees(tmp_path, monkeypatch):
+    from which_model import pipeline
+    from which_model.sources.artificial_analysis import AAEntry
+
+    monkeypatch.chdir(tmp_path)
+    data = tmp_path / "data"
+    (data / "overrides").mkdir(parents=True)
+    catalog = Catalog(
+        models=[
+            ModelRecord(
+                name="Solo",
+                model_id="solo-model",
+                rows=[PricingRow(raw_name="Solo", name="Solo", input_usd=1.0)],
+            )
+        ]
+    )
+    (data / "catalog.json").write_text(catalog.model_dump_json())
+    monkeypatch.setattr(
+        pipeline,
+        "load_aa_entries",
+        lambda *args, **kwargs: (
+            [AAEntry(slug="solo-model", name="Solo", scores={"coding": 50.0})],
+            True,
+            [],
+        ),
+    )
+
+    result = runner.invoke(app, ["verify"])
+
+    assert result.exit_code == 0
+    assert "No contradiction" in result.output

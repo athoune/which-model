@@ -15,7 +15,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from . import agent, pipeline
+from . import agent, benchmarks, pipeline
 from . import report as dashboard
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -136,6 +136,52 @@ def check(
     )
     for request in snapshot.requests:
         console.print(f"  · {request.model_name} — missing {', '.join(request.missing)}")
+    raise typer.Exit(code=1)
+
+
+@app.command()
+def verify(
+    force: bool = typer.Option(False, "--force", help="Ignore the cache TTL and refetch Artificial Analysis."),
+) -> None:
+    """Cross-check curated overrides against Artificial Analysis.
+
+    Overrides outrank every automatic source, so a wrong one silently hides a
+    correct value. Exits non-zero if any override disagrees with AA.
+    """
+    base_dir = _base_dir()
+    catalog = pipeline.load_catalog(base_dir)
+    if catalog is None:
+        err_console.print("[red]No cached catalog. Run `which-model refresh` first.[/red]")
+        raise typer.Exit(code=2)
+
+    entries, available, warnings = pipeline.load_aa_entries(base_dir, force=force)
+    for warning in warnings:
+        err_console.print(f"[yellow]warning:[/yellow] {warning}")
+    if not available:
+        err_console.print(
+            "[red]Artificial Analysis unavailable (set AA_API_KEY). Cannot verify.[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    problems = benchmarks.check_overrides(
+        catalog,
+        entries,
+        overrides=benchmarks.load_overrides(base_dir / benchmarks.OVERRIDES_DIR),
+        aliases=benchmarks.load_aliases(base_dir / benchmarks.ALIASES_PATH),
+    )
+    if not problems:
+        console.print("[green]No contradiction: every override agrees with Artificial Analysis.[/green]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[red]{len(problems)} contradiction(s) between overrides and Artificial Analysis.[/red]")
+    for problem in problems:
+        if problem.reason == "not_found":
+            detail = ", ".join(f"{key} {value:g}" for key, value in sorted(problem.aa_scores.items()))
+            console.print(f"  · {problem.model_name}: override says not_found, AA has {detail}")
+        else:
+            console.print(
+                f"  · {problem.model_name}: {problem.key} override={problem.override:g} AA={problem.aa:g}"
+            )
     raise typer.Exit(code=1)
 
 

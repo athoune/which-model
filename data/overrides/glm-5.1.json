@@ -1,9 +1,0 @@
-{
-  "model_name": "GLM-5.1",
-  "scores": {
-    "coding": 55.8,
-    "intelligence": 32
-  },
-  "source": "AA Coding Index: https://benchlm.ai/benchmarks/aacodingindex (#45, 55.8%), AA Intelligence Index: https://artificialanalysis.ai/models/glm-5-1 (32). Agentic: not found after thorough search.",
-  "as_of": "2026-09-25"
-}

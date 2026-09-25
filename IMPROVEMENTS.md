@@ -36,6 +36,29 @@ Items marked `[DONE]` have already been addressed.
   records as resolved; it now reports scored, searched-none and pending
   separately.)
 
+## Benchmark data integrity
+
+- [DONE] **Audit the curated overrides against Artificial Analysis.** (Fixed: 24
+  of the 28 committed overrides were wrong or actively harmful and were removed.)
+
+  - `coding` was right 15/15, but `agentic` was wrong 9/9 (always 5–14 points
+    too high) and `intelligence` was wrong 11/16 — two of them confirmed on the
+    very AA pages the overrides cited (GPT-5.6 Luna 51 vs **37**, GLM-5.1 32 vs
+    **26**).
+  - 8 of the 12 `not_found` answers were false: AA does score those models. Only
+    Hy4 preview, MiMo-V2.6-Flash and Space Bunny Free are genuinely absent.
+    Qwen3.8 Flash was left as `not_found` (ambiguous against AA's
+    `Qwen3.8-Flash-Next`).
+  - Root cause: AA slugs use dashes (`glm-5-3-flash`) where the docs keep the
+    dot (`glm-5.3-flash`), so the matcher silently missed 10 models AA already
+    covered, and those models were sent to the agent instead.
+  - Fix: fold dots to dashes when matching AA slugs, add four explicit aliases,
+    delete the bad overrides. Scored models went 21 → 29, `not_found` 12 → 4.
+
+- [DONE] **Verify overrides against AA.** (Added `which-model verify`: it flags a
+  scored key that contradicts AA, or a `not_found` for a model AA scores, and
+  exits non-zero. The agent work list now tells agents to run it.)
+
 ## Robustness and performance
 
 - [DONE] **Reject `--offline --force` in `report`.** (Fixed: the combination is

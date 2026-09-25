@@ -167,3 +167,16 @@ def load_benchmarks(base_dir: Path = Path(".")) -> dict[str, BenchmarkRecord]:
         return {}
     raw = json.loads(path.read_text())
     return {name: BenchmarkRecord.model_validate(entry) for name, entry in raw.items()}
+
+
+def load_aa_entries(
+    base_dir: Path = Path("."),
+    *,
+    force: bool = False,
+    ttl: timedelta = timedelta(hours=12),
+) -> tuple[list, bool, list[str]]:
+    """Fetch Artificial Analysis entries (through the cache) for auditing."""
+    fetcher = Fetcher(base_dir / "data" / "cache", ttl=ttl)
+    warnings: list[str] = []
+    entries, available = _load_aa(fetcher, force=force, warnings=warnings)
+    return entries, available, warnings

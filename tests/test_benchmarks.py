@@ -70,6 +70,16 @@ def test_creator_prefixed_slug_matches_unambiguously(docs_catalog):
     assert resolution.records["GLM-5.3-Flash"].matched_slug == "z-ai/glm-5.3-flash"
 
 
+def test_dotted_name_matches_dashed_aa_slug(docs_catalog):
+    """The docs keep the dot; AA writes a dash (``glm-5.3`` vs ``glm-5-3``)."""
+    resolution = benchmarks.resolve(
+        docs_catalog,
+        [AAEntry(slug="glm-5-3-flash", name="GLM 5.3 Flash", scores={"coding": 71.5})],
+    )
+    assert resolution.records["GLM-5.3-Flash"].scores["coding"] == 71.5
+    assert resolution.records["GLM-5.3-Flash"].source == "artificial_analysis"
+
+
 def test_ambiguous_short_slug_does_not_match(docs_catalog):
     resolution = benchmarks.resolve(
         docs_catalog,
@@ -109,3 +119,43 @@ def test_override_without_a_date_falls_back_to_today(docs_catalog):
         docs_catalog, [], overrides={"GLM-5.3-Flash": {"coding": 77.0}}
     ).records["GLM-5.3-Flash"]
     assert record.as_of == datetime.now(UTC).date()
+
+
+AA_FLASH = AAEntry(slug="glm-5-3-flash", name="GLM 5.3 Flash", scores={"coding": 71.5})
+
+
+def test_check_overrides_flags_a_wrong_value(docs_catalog):
+    problems = benchmarks.check_overrides(
+        docs_catalog, [AA_FLASH], overrides={"GLM-5.3-Flash": {"coding": 99.0}}
+    )
+    assert [(p.model_name, p.key, p.reason) for p in problems] == [
+        ("GLM-5.3-Flash", "coding", "value")
+    ]
+    assert problems[0].override == 99.0
+    assert problems[0].aa == 71.5
+
+
+def test_check_overrides_flags_a_false_not_found(docs_catalog):
+    problems = benchmarks.check_overrides(docs_catalog, [AA_FLASH], overrides={"GLM-5.3-Flash": {}})
+    assert len(problems) == 1
+    assert problems[0].reason == "not_found"
+    assert problems[0].aa_scores == {"coding": 71.5}
+
+
+def test_check_overrides_is_quiet_when_there_is_nothing_to_disagree_with(docs_catalog):
+    # Exact agreement is not a contradiction.
+    assert (
+        benchmarks.check_overrides(
+            docs_catalog, [AA_FLASH], overrides={"GLM-5.3-Flash": {"coding": 71.5}}
+        )
+        == []
+    )
+    # No AA entry at all: an override cannot contradict what is absent.
+    assert (
+        benchmarks.check_overrides(
+            docs_catalog, [], overrides={"GLM-5.3-Flash": {"coding": 99.0}}
+        )
+        == []
+    )
+    # A model with no override is never reported.
+    assert benchmarks.check_overrides(docs_catalog, [AA_FLASH], overrides={}) == []

@@ -89,6 +89,13 @@ uv run which-model check          # exit 1 and list the gaps
 uv run which-model check --json   # machine-readable
 ```
 
+After overrides are written, `verify` cross-checks them against Artificial
+Analysis, because overrides outrank AA and a wrong one hides the right value:
+
+```bash
+uv run which-model verify         # exit 1 on any override that contradicts AA
+```
+
 A human or an agent answers by writing `data/overrides/<slug>.json`:
 
 ```json
@@ -116,7 +123,9 @@ Only citable values belong there: **an absent score is honest, an invented one
 is worse than useless**. Matching is deliberately strict — an alias
 (`data/aliases.json`), an exact id, or an unambiguous creator-prefixed slug.
 There is no fuzzy matching, so `GLM-5.3` can never inherit `GLM-5.3-Flash`
-scores.
+scores. Slugs are compared with dots and dashes folded together, because AA
+writes `glm-5-3-flash` where the docs write `glm-5.3-flash`; without that,
+every dotted model would be missed and re-requested needlessly.
 
 ## Artificial Analysis
 

@@ -96,12 +96,33 @@ def load_aliases(path: Path = ALIASES_PATH) -> dict[str, str]:
 
 
 def index_aa(entries: list[AAEntry]) -> dict[str, AAEntry]:
-    return {entry.slug: entry for entry in entries if entry.slug}
+    return {_norm_slug(entry.slug): entry for entry in entries if entry.slug}
 
 
 def _short_slug(slug: str) -> str:
     """Drop a ``creator/`` prefix from an Artificial Analysis slug."""
     return slug.rsplit("/", 1)[-1]
+
+
+def _norm_slug(slug: str) -> str:
+    """Canonicalise a slug for matching.
+
+    Artificial Analysis writes version numbers with dashes (``v4-1``) while
+    the Go docs and models.dev keep the dot (``v4.1``). Comparing on a
+    dash-only form lets ``deepseek-v4.1-flash`` match ``deepseek-v4-1-flash``
+    instead of silently missing every dotted model.
+    """
+    return slug.replace(".", "-")
+
+
+def _aa_indexes(aa_entries: list[AAEntry]) -> tuple[dict[str, AAEntry], dict[str, list[AAEntry]]]:
+    """Full-slug and short-slug lookup tables, both canonicalised."""
+    aa_index = index_aa(aa_entries)
+    short_index: dict[str, list[AAEntry]] = {}
+    for entry in aa_entries:
+        if entry.slug:
+            short_index.setdefault(_norm_slug(_short_slug(entry.slug)), []).append(entry)
+    return aa_index, short_index
 
 
 def resolve(
@@ -116,11 +137,7 @@ def resolve(
     curated = {name: _as_override(value) for name, value in (overrides or {}).items()}
     aliases = aliases or {}
     today = datetime.now(UTC).date()
-    aa_index = index_aa(aa_entries)
-    short_index: dict[str, list[AAEntry]] = {}
-    for entry in aa_entries:
-        if entry.slug:
-            short_index.setdefault(_short_slug(entry.slug), []).append(entry)
+    aa_index, short_index = _aa_indexes(aa_entries)
 
     resolution = Resolution(aa_available=bool(aa_entries))
 
@@ -189,12 +206,12 @@ def _match_aa(
     are for.
     """
     alias = aliases.get(name)
-    if alias and alias in aa_index:
-        return aa_index[alias]
+    if alias and _norm_slug(alias) in aa_index:
+        return aa_index[_norm_slug(alias)]
 
-    candidates = [slugify(name)]
+    candidates = [_norm_slug(slugify(name))]
     if model_id:
-        candidates.append(model_id)
+        candidates.append(_norm_slug(model_id))
     for candidate in candidates:
         if candidate in aa_index:
             return aa_index[candidate]
@@ -204,3 +221,81 @@ def _match_aa(
         if hits and len(hits) == 1:
             return hits[0]
     return None
+
+
+# Overrides and Artificial Analysis round to one decimal; anything beyond half
+# a point is a real disagreement, not a rounding artefact.
+VERIFY_TOLERANCE = 0.6
+
+
+@dataclass
+class Contradiction:
+    """A curated answer that disagrees with Artificial Analysis."""
+
+    model_name: str
+    key: str
+    override: float | None
+    aa: float | None
+    reason: str  # "value" | "not_found"
+    aa_scores: dict[str, float] = field(default_factory=dict)
+
+
+def check_overrides(
+    catalog: Catalog,
+    aa_entries: list[AAEntry],
+    *,
+    overrides: dict[str, Override | dict[str, float]] | None = None,
+    aliases: dict[str, str] | None = None,
+) -> list[Contradiction]:
+    """Cross-check curated overrides against Artificial Analysis.
+
+    Because overrides outrank every automatic source, a wrong override is
+    worse than no override: it hides the correct value. This flags the two
+    harmful cases only, so it stays quiet on genuinely missing data:
+
+    * a scored key that contradicts AA (``reason="value"``);
+    * a ``not_found`` answer for a model AA does score (``reason="not_found"``).
+
+    A model absent from AA, or a key AA does not publish, is not a
+    contradiction: there is nothing to disagree with.
+    """
+    curated = {name: _as_override(value) for name, value in (overrides or {}).items()}
+    aliases = aliases or {}
+    aa_index, short_index = _aa_indexes(aa_entries)
+
+    problems: list[Contradiction] = []
+    for record in catalog.models:
+        override = curated.get(record.name)
+        if override is None:
+            continue
+        match = _match_aa(record.name, record.model_id, aa_index, short_index, aliases)
+        if match is None:
+            continue
+
+        if not override.scores:
+            if match.scores:
+                problems.append(
+                    Contradiction(
+                        model_name=record.name,
+                        key="*",
+                        override=None,
+                        aa=None,
+                        reason="not_found",
+                        aa_scores=dict(match.scores),
+                    )
+                )
+            continue
+
+        for key, value in sorted(override.scores.items()):
+            actual = match.scores.get(key)
+            if actual is not None and abs(value - actual) > VERIFY_TOLERANCE:
+                problems.append(
+                    Contradiction(
+                        model_name=record.name,
+                        key=key,
+                        override=value,
+                        aa=actual,
+                        reason="value",
+                    )
+                )
+    return problems
