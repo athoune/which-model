@@ -5,29 +5,36 @@ Items marked `[DONE]` have already been addressed.
 
 ## User-visible correctness
 
-- [ ] **Align the budget view with its legend.** `report.py` defines an
-  `agentic` entry in `BUDGET_LEGEND` but `_budget_table` only renders a `coding`
-  column. Either add an `agentic` column or remove the legend entry.
+- [DONE] **Align the budget view with its legend.** (Fixed: the stale `agentic`
+  entry was removed from `BUDGET_LEGEND`; the narrow budget table keeps only the
+  `coding` column, and `agentic` stays documented in the `perf` view. A test now
+  asserts every legend entry maps to a column that is actually rendered.)
 
-- [ ] **Avoid double JSON serialization in `check --json`.** `cli.py` calls
-  `console.print_json(json.dumps(...))`. Pass the object directly via
-  `print_json(data=...)` instead.
+- [DONE] **Avoid double JSON serialization in `check --json`.** (Fixed:
+  `print_json(data=...)` receives the objects directly; the manual `json.dumps`
+  call and its now-unused import are gone.)
 
-- [ ] **Use a typed kind for `AgentRequest`.** `AgentRequest.kind` is currently
-  `str`. Replace it with a `Literal["benchmark", "pricing", "identity"]` or a
-  `StrEnum` to catch typos statically.
+- [DONE] **Use a typed kind for `AgentRequest`.** (Fixed: a `RequestKind`
+  `StrEnum` with `benchmark` / `pricing` / `identity`; a typo now fails
+  validation instead of travelling as a free string.)
 
-- [ ] **Preserve `as_of` from override files.** `benchmarks.resolve()` overwrites
-  `as_of` with `datetime.now(UTC).date()` even when the override JSON contains
-  its own date. Keep the override date when present.
+- [DONE] **Preserve `as_of` from override files.** (Fixed: `load_overrides`
+  returns an `Override` carrying the file's date and citation; a present date is
+  kept, otherwise the run date is used.)
 
-- [ ] **Surface `models.dev` cost disagreements.** `models_dev.py` parses
-  `cost_input`, `cost_output` and `cost_cache_read`, but `catalog.py` never
-  compares them with the docs prices. Report mismatches as model issues.
+- [DONE] **Surface `models.dev` cost disagreements.** (Fixed: `catalog.py` flags
+  a model when models.dev's price matches *no* documented tier. models.dev
+  collapses tiers into one rate, so matching any single tier counts as
+  agreement and tiered models are not spuriously flagged.)
 
-- [ ] **Guard against `baseline == 0`.** `report.py` uses `if baseline:` to decide
-  whether to compute the verbosity index. A median of `0` would silently skip it;
-  use `if baseline is not None:`.
+- [DONE] **Guard against `baseline == 0`.** (Fixed: `if baseline is not None:`
+  everywhere, and `verbosity_index` returns `None` for a non-positive baseline
+  instead of dividing by zero.)
+
+- [DONE] **Count `not_found` honestly in the provenance panel.** (Fixed: it
+  claimed `benchmarks resolved: 33/33` while counting investigated-but-empty
+  records as resolved; it now reports scored, searched-none and pending
+  separately.)
 
 ## Robustness and performance
 

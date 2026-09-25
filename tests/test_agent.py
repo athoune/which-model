@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from which_model import agent
-from which_model.schemas import BenchmarkRecord
+from which_model.schemas import BenchmarkRecord, RequestKind
 
 
 def test_requests_only_for_unresolved_models(docs_catalog):
@@ -95,3 +95,15 @@ def test_pricing_request_when_a_model_has_no_rows():
     requests = agent.build_requests(catalog, {})
     assert len(requests) == 1
     assert requests[0].kind == "pricing"
+
+
+def test_request_kind_is_a_typed_enum():
+    """A typo in the kind must fail validation, not travel as a free string."""
+    import pytest
+    from pydantic import ValidationError
+
+    from which_model.schemas import AgentRequest
+
+    assert AgentRequest(model_name="X", kind="benchmark").kind is RequestKind.BENCHMARK
+    with pytest.raises(ValidationError):
+        AgentRequest(model_name="X", kind="benchsmark")

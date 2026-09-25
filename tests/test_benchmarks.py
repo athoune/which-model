@@ -88,3 +88,24 @@ def test_not_found_override_records_without_inventing_a_score(docs_catalog):
     assert record.scores == {}
     assert record.source == "not_found"
     assert "GLM-5.3-Flash" not in resolution.unresolved
+
+
+def test_override_date_is_preserved(docs_catalog):
+    """The date the value was read matters more than the date of this run."""
+    from datetime import date
+
+    overrides = {
+        "GLM-5.3-Flash": benchmarks.Override(scores={"coding": 77.0}, as_of=date(2026, 1, 2))
+    }
+    record = benchmarks.resolve(docs_catalog, [], overrides=overrides).records["GLM-5.3-Flash"]
+    assert record.scores["coding"] == 77.0
+    assert record.as_of == date(2026, 1, 2)
+
+
+def test_override_without_a_date_falls_back_to_today(docs_catalog):
+    from datetime import UTC, datetime
+
+    record = benchmarks.resolve(
+        docs_catalog, [], overrides={"GLM-5.3-Flash": {"coding": 77.0}}
+    ).records["GLM-5.3-Flash"]
+    assert record.as_of == datetime.now(UTC).date()

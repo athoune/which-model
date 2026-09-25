@@ -64,7 +64,7 @@ def build_rows(
             row.tasks_month = requests_in_limit(pricing, profile)
             windows = requests_per_window(pricing, profile)
             row.tasks_5h = windows["5h"]
-        if baseline:
+        if baseline is not None:
             row.verbosity = verbosity_index(profile, baseline)
         rows.append(row)
 
@@ -123,7 +123,6 @@ BUDGET_LEGEND = (
     ("tasks/5h", "tasks that fit in the 5-hour window (20% of the allowance)"),
     ("tasks/mo", "tasks that fit in the monthly window (100% of the allowance)"),
     ("coding", "benchmark score, 0-100. '-' = not resolved yet"),
-    ("agentic", "benchmark score, 0-100. '-' = not resolved yet"),
     ("source", "where the score comes from: see the source legend below"),
 )
 
@@ -165,7 +164,7 @@ def _legend(view: str, baseline: int | None) -> Panel:
         "",
         SOURCE_LEGEND,
     ]
-    if baseline:
+    if baseline is not None:
         lines.append(f"verbosity baseline: 100 on the index = {baseline} output tokens per task")
     return Panel(Group(*[Text.from_markup(line) for line in lines]), title="Legend", border_style="dim")
 
@@ -227,7 +226,7 @@ def _header(rows: list[Row], baseline: int | None, pending: int) -> Panel:
     if pending:
         text.append("  ·  ")
         text.append(f"{pending} awaiting an agent", style="yellow")
-    if baseline:
+    if baseline is not None:
         text.append(f"  ·  verbosity baseline {baseline} output tokens", style="dim")
     return Panel(text, title="which-model · OpenCode Go", border_style="cyan")
 
@@ -361,11 +360,21 @@ def _score(row: Row, key: str) -> str:
     return "-" if value is None else f"{value:.1f}"
 
 
+def _benchmark_summary(catalog: Catalog, benchmarks: dict[str, BenchmarkRecord], pending: int) -> str:
+    """Scored, searched-but-empty and still-pending, never conflated."""
+    scored = sum(1 for record in benchmarks.values() if record.scores)
+    searched = sum(1 for record in benchmarks.values() if record.source == "not_found")
+    return (
+        f"benchmarks: {scored} scored  ·  {searched} searched, none citable  ·  "
+        f"{pending} pending  ·  {len(catalog.models)} models"
+    )
+
+
 def provenance_panel(catalog: Catalog, benchmarks: dict[str, BenchmarkRecord], pending: int) -> Panel:
     lines = [
         f"docs {catalog.refs.get('docs_url', '?')}",
         f"  sha256 {catalog.refs.get('docs_sha256', '?')[:16]}…  built {catalog.refs.get('built_at', '?')}",
-        f"benchmarks resolved: {len(benchmarks)}/{len(catalog.models)}  ·  pending agent: {pending}",
+        _benchmark_summary(catalog, benchmarks, pending),
     ]
     if catalog.served_undocumented:
         lines.append(

@@ -9,7 +9,6 @@ Three verbs, in order of how often you use them:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated
 
@@ -123,7 +122,7 @@ def check(
     snapshot = _current(base_dir, refresh=not offline, force=False)
 
     if as_json:
-        console.print_json(json.dumps([request.model_dump(mode="json") for request in snapshot.requests]))
+        console.print_json(data=[request.model_dump(mode="json") for request in snapshot.requests])
         raise typer.Exit(code=1 if snapshot.requests else 0)
 
     if not snapshot.requests:

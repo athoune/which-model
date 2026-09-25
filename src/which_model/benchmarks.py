@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .catalog import slugify
@@ -36,6 +36,20 @@ class Resolution:
     aa_available: bool = False
 
 
+@dataclass
+class Override:
+    """A curated answer: scores plus the citation that justifies them."""
+
+    scores: dict[str, float] = field(default_factory=dict)
+    as_of: date | None = None
+    citation: str | None = None
+
+
+def _as_override(value: Override | dict[str, float]) -> Override:
+    """Accept both a plain score dict (tests, callers) and an Override."""
+    return value if isinstance(value, Override) else Override(scores=dict(value))
+
+
 def load_seed(path: Path = SEED_PATH) -> dict[str, dict[str, float]]:
     if not path.exists():
         return {}
@@ -46,16 +60,33 @@ def load_seed(path: Path = SEED_PATH) -> dict[str, dict[str, float]]:
     }
 
 
-def load_overrides(directory: Path = OVERRIDES_DIR) -> dict[str, dict[str, float]]:
+def load_overrides(directory: Path = OVERRIDES_DIR) -> dict[str, Override]:
     if not directory.exists():
         return {}
-    overrides: dict[str, dict[str, float]] = {}
+    overrides: dict[str, Override] = {}
     for path in sorted(directory.glob("*.json")):
         payload = json.loads(path.read_text())
         name = payload.get("model_name") or path.stem
         scores = payload.get("scores", payload)
-        overrides[name] = {k: float(v) for k, v in scores.items() if isinstance(v, (int, float))}
+        overrides[name] = Override(
+            scores={k: float(v) for k, v in scores.items() if isinstance(v, (int, float))},
+            as_of=_parse_date(payload.get("as_of")),
+            citation=_as_text(payload.get("source")),
+        )
     return overrides
+
+
+def _parse_date(value: object) -> date | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _as_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
 
 
 def load_aliases(path: Path = ALIASES_PATH) -> dict[str, str]:
@@ -78,12 +109,13 @@ def resolve(
     aa_entries: list[AAEntry],
     *,
     seed: dict[str, dict[str, float]] | None = None,
-    overrides: dict[str, dict[str, float]] | None = None,
+    overrides: dict[str, Override | dict[str, float]] | None = None,
     aliases: dict[str, str] | None = None,
 ) -> Resolution:
     seed = seed or {}
-    overrides = overrides or {}
+    curated = {name: _as_override(value) for name, value in (overrides or {}).items()}
     aliases = aliases or {}
+    today = datetime.now(UTC).date()
     aa_index = index_aa(aa_entries)
     short_index: dict[str, list[AAEntry]] = {}
     for entry in aa_entries:
@@ -95,6 +127,7 @@ def resolve(
     for record in catalog.models:
         merged: dict[str, float] = {}
         contributors: list[str] = []
+        override = curated.get(record.name)
 
         if record.name in seed:
             merged.update(seed[record.name])
@@ -106,12 +139,15 @@ def resolve(
             contributors.append("artificial_analysis")
             resolution.aa_matched += 1
 
-        if record.name in overrides:
-            merged.update(overrides[record.name])
+        if override is not None:
+            merged.update(override.scores)
             contributors.append("override")
 
+        # Prefer the date the answer was read over the date of this run.
+        as_of = (override.as_of if override is not None else None) or today
+
         if not merged:
-            if record.name in overrides:
+            if override is not None:
                 # The agent investigated and found nothing citable. Record it
                 # so the model is not requested forever, but keep the scores
                 # empty: nothing is invented.
@@ -119,7 +155,7 @@ def resolve(
                     model_name=record.name,
                     scores={},
                     source="not_found",
-                    as_of=datetime.now(UTC).date(),
+                    as_of=as_of,
                     confidence="override",
                 )
                 continue
@@ -132,7 +168,7 @@ def resolve(
             scores=merged,
             source=source,
             matched_slug=match.slug if match else None,
-            as_of=datetime.now(UTC).date(),
+            as_of=as_of,
             confidence="override" if "override" in contributors else "auto",
         )
 

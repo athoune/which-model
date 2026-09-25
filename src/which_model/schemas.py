@@ -28,6 +28,14 @@ class Period(StrEnum):
     OFF_PEAK = "off_peak"
 
 
+class RequestKind(StrEnum):
+    """Why the pipeline is asking an agent for help."""
+
+    BENCHMARK = "benchmark"
+    PRICING = "pricing"
+    IDENTITY = "identity"
+
+
 class Qualifier(BaseModel):
     """The ``(…)`` suffix that makes a pricing row a distinct tier."""
 
@@ -156,7 +164,7 @@ class BenchmarkRecord(BaseModel):
 class AgentRequest(BaseModel):
     model_name: str
     model_id: str | None = None
-    kind: str  # "benchmark" | "pricing" | "identity"
+    kind: RequestKind = RequestKind.BENCHMARK
     missing: list[str] = Field(default_factory=list)
     hints: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utcnow)

@@ -36,3 +36,42 @@ def test_records_issue_when_absent_from_models_dev(docs_catalog):
     record = next(r for r in docs_catalog.models if r.name == "Kimi K3")
     assert record.in_models_dev is False
     assert any("models.dev" in issue for issue in record.issues)
+
+
+def test_flags_models_dev_price_that_matches_no_tier(docs):
+    """A price the two sources disagree on must surface, not be swallowed."""
+    dev = {"glm-5.3-flash": ProviderModel(id="glm-5.3-flash", name="GLM-5.3-Flash", cost_input=9.99)}
+    catalog = build_catalog(docs, dev, [])
+    record = next(r for r in catalog.models if r.name == "GLM-5.3-Flash")
+    assert any("prices match no documented tier" in issue for issue in record.issues)
+
+
+def test_no_price_issue_when_models_dev_matches_a_tier(docs):
+    dev = {
+        "glm-5.3-flash": ProviderModel(
+            id="glm-5.3-flash",
+            name="GLM-5.3-Flash",
+            cost_input=0.15,
+            cost_output=0.5,
+            cost_cache_read=0.03,
+        )
+    }
+    catalog = build_catalog(docs, dev, [])
+    record = next(r for r in catalog.models if r.name == "GLM-5.3-Flash")
+    assert not any("match no documented tier" in issue for issue in record.issues)
+
+
+def test_tiered_model_is_not_flagged_when_a_tier_matches(docs):
+    """models.dev collapses tiers, so matching any single tier is agreement."""
+    dev = {
+        "qwen3.7-plus": ProviderModel(
+            id="qwen3.7-plus",
+            name="Qwen3.7 Plus",
+            cost_input=1.2,
+            cost_output=4.8,
+            cost_cache_read=0.12,
+        )
+    }
+    catalog = build_catalog(docs, dev, [])
+    record = next(r for r in catalog.models if r.name == "Qwen3.7 Plus")
+    assert not any("match no documented tier" in issue for issue in record.issues)

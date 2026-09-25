@@ -90,7 +90,11 @@ def _row_rank(row: PricingRow) -> tuple:
 
 
 def verbosity_index(profile: TaskProfile | None, baseline_output: int) -> float | None:
-    """Relative verbosity, 100 == baseline output length."""
-    if profile is None:
+    """Relative verbosity, 100 == baseline output length.
+
+    ``None`` when the profile is unknown or the baseline is not positive:
+    dividing by a zero median would be meaningless.
+    """
+    if profile is None or baseline_output <= 0:
         return None
     return 100.0 * profile.output_tokens / baseline_output

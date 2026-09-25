@@ -91,13 +91,47 @@ def test_tiers_group_close_scores():
     assert by_name["No Score"].tier is None
 
 
-def _render(view: str) -> str:
-    catalog, benchmarks = sample_catalog()
+def _render_catalog(catalog, benchmarks, view: str) -> str:
     rows, baseline = report.build_rows(catalog, benchmarks)
     stream = StringIO()
     console = Console(file=stream, width=140, force_terminal=False)
     report.render(console, rows, baseline, view, pending=1)
     return stream.getvalue()
+
+
+def _render(view: str) -> str:
+    catalog, benchmarks = sample_catalog()
+    return _render_catalog(catalog, benchmarks, view)
+
+
+def test_legend_entries_correspond_to_real_columns():
+    """Regression: a legend entry must describe a column that is rendered.
+
+    The budget view once documented an `agentic` column it did not draw.
+    """
+    legends = {
+        "budget": report.BUDGET_LEGEND,
+        "verbosity": report.VERBOSITY_LEGEND,
+        "perf": report.PERF_LEGEND,
+    }
+    for view, entries in legends.items():
+        before_legend = _render(view).split("Legend")[0]
+        for label, _ in entries:
+            assert label in before_legend, (view, label)
+
+
+def test_zero_baseline_does_not_crash():
+    """A median output length of 0 must disable the index, not divide by zero."""
+    catalog = Catalog(
+        models=[
+            model("Silent A", 0.10, 0.20, 60, 0),
+            model("Silent B", 0.10, 0.20, 60, 0),
+        ]
+    )
+    rows, baseline = report.build_rows(catalog, {})
+    assert baseline == 0
+    assert all(row.verbosity is None for row in rows)
+    _render_catalog(catalog, {}, "verbosity")
 
 
 def test_every_view_renders():
@@ -107,30 +141,21 @@ def test_every_view_renders():
         assert "Cheap Great" in output
 
 
-def test_legend_explains_the_star_and_every_column():
-    legends = {
-        "budget": report.BUDGET_LEGEND,
-        "verbosity": report.VERBOSITY_LEGEND,
-        "perf": report.PERF_LEGEND,
-    }
-    for view, entries in legends.items():
-        output = _render(view)
-        assert "Pareto frontier" in output
-        assert "Legend" in output
-        # Every abbreviated header must be spelled out in the legend.
-        for label, _ in entries:
-            assert label in output, (view, label)
-
-
 def test_provenance_view_renders_reconciliation():
-    catalog, _ = sample_catalog()
+    catalog, benchmarks = sample_catalog()
     catalog.served_undocumented = ["legacy-model"]
+    benchmarks["No Score"] = BenchmarkRecord(
+        model_name="No Score", scores={}, source="not_found"
+    )
     stream = StringIO()
     console = Console(file=stream, width=140, force_terminal=False)
-    report.render_provenance(console, catalog, {}, pending=2)
+    report.render_provenance(console, catalog, benchmarks, pending=2)
     output = stream.getvalue()
     assert "legacy-model" in output
-    assert "pending agent: 2" in output
+    # Scored, investigated-but-empty and still-pending must never be conflated.
+    assert "3 scored" in output
+    assert "1 searched, none citable" in output
+    assert "2 pending" in output
 
 
 def test_verbosity_view_shows_cost_sensitivity():

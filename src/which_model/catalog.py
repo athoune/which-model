@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import re
 
-from .schemas import Catalog, DocsModel, GoDocs, ModelRecord, RequestsEstimate
+from .schemas import Catalog, DocsModel, GoDocs, ModelRecord, PricingRow, RequestsEstimate
 from .sources.models_dev import ProviderModel
 
 _SLUG_DOTS = re.compile(r"[^a-z0-9.]+")
+
+# Relative tolerance when comparing models.dev prices with the docs tiers.
+_PRICE_TOLERANCE = 0.005
 
 
 def slugify(name: str) -> str:
@@ -52,6 +55,9 @@ def build_catalog(
             record.release_date = dev.release_date
             if record.model_id and dev.id != record.model_id:
                 record.issues.append(f"docs id {record.model_id!r} != models.dev id {dev.id!r}")
+            disagreement = _dev_cost_disagreement(record, dev)
+            if disagreement:
+                record.issues.append(disagreement)
         else:
             record.issues.append("absent from models.dev")
 
@@ -91,6 +97,36 @@ def _from_docs(model: DocsModel) -> ModelRecord:
         privacy_retention=model.privacy_retention,
         in_docs=True,
     )
+
+
+def _dev_cost_disagreement(record: ModelRecord, dev: ProviderModel) -> str | None:
+    """Report when models.dev prices match no documented tier.
+
+    models.dev collapses the docs' tiers into a single rate, so a mismatch on
+    one tier is expected. We only flag it when *no* tier matches, which means
+    the two sources genuinely disagree rather than describing different tiers.
+    """
+    published = {
+        "input": (dev.cost_input, "input_usd"),
+        "output": (dev.cost_output, "output_usd"),
+        "cache_read": (dev.cost_cache_read, "cache_read_usd"),
+    }
+    present = {name: (value, attr) for name, (value, attr) in published.items() if value is not None}
+    if not present or not record.rows:
+        return None
+
+    def matches(row: PricingRow) -> bool:
+        for value, attribute in present.values():
+            local = getattr(row, attribute)
+            if local is None or abs(local - value) > _PRICE_TOLERANCE * max(abs(value), 1e-9):
+                return False
+        return True
+
+    if any(matches(row) for row in record.rows):
+        return None
+
+    described = ", ".join(f"{name} {value:g}" for name, (value, _) in present.items())
+    return f"models.dev prices match no documented tier ({described})"
 
 
 def _find_dev(model: DocsModel, dev_models: dict[str, ProviderModel]) -> ProviderModel | None:
