@@ -74,6 +74,10 @@ def refresh(
             "[yellow]No benchmark scores resolved. Run `which-model check` to see the "
             "requests to hand to an agent.[/yellow]"
         )
+    if snapshot.requests:
+        console.print(
+            f"[dim]Work list for an agent: {agent.REQUEST_DIR}/{agent.WORKLIST_NAME}[/dim]"
+        )
 
 
 @app.command()
@@ -121,8 +125,8 @@ def check(
 
     console.print(
         f"[yellow]{len(snapshot.requests)} model(s) need a human or an agent.[/yellow] "
-        f"Requests written to [bold]{agent.REQUEST_DIR}/[/bold]. "
-        "Answer by adding `data/overrides/<model>.json`."
+        f"Hand the agent [bold]{agent.REQUEST_DIR}/{agent.WORKLIST_NAME}[/bold] — "
+        f"it contains the mission, the exact output format and the work list."
     )
     for request in snapshot.requests:
         console.print(f"  · {request.model_name} — missing {', '.join(request.missing)}")

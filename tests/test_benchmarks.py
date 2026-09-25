@@ -79,3 +79,12 @@ def test_ambiguous_short_slug_does_not_match(docs_catalog):
         ],
     )
     assert "GLM-5.3-Flash" in resolution.unresolved
+
+
+def test_not_found_override_records_without_inventing_a_score(docs_catalog):
+    """An agent that searched and found nothing must stop the requests."""
+    resolution = benchmarks.resolve(docs_catalog, [], overrides={"GLM-5.3-Flash": {}})
+    record = resolution.records["GLM-5.3-Flash"]
+    assert record.scores == {}
+    assert record.source == "not_found"
+    assert "GLM-5.3-Flash" not in resolution.unresolved

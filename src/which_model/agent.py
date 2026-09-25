@@ -1,20 +1,25 @@
 """The agent hand-off contract.
 
 Refreshing never calls an LLM. When something cannot be resolved
-deterministically, the pipeline writes a structured request next to the
-cache and ``check`` exits non-zero. A human or an agent then answers by
-writing ``data/overrides/<slug>.json``, which outranks every automatic
-source. The request is a *file contract*, not a prompt.
+deterministically, the pipeline writes:
+
+* ``data/agent-requests/README.md`` — the work list an agent reads first:
+  what to do, the exact output format, the hard rules, how to verify;
+* ``data/agent-requests/<slug>.md`` — one file per model with its specifics.
+
+A human or an agent answers by writing ``data/overrides/<slug>.json``, which
+outranks every automatic source. This is a *file contract*, not a prompt.
 """
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from .schemas import AgentRequest, BenchmarkRecord, Catalog
 
 REQUEST_DIR = Path("data/agent-requests")
+OVERRIDES_DIR = Path("data/overrides")
+WORKLIST_NAME = "README.md"
 
 BENCHMARK_KEYS = ("coding", "agentic", "intelligence")
 
@@ -25,10 +30,20 @@ _HINTS = {
 }
 
 
+def slug(name: str) -> str:
+    return name.strip().lower().replace(" ", "-")
+
+
 def build_requests(
     catalog: Catalog,
     benchmarks: dict[str, BenchmarkRecord],
 ) -> list[AgentRequest]:
+    """Ask for exactly what is still missing, per score key.
+
+    A model that Artificial Analysis only partially covers (say, intelligence
+    but not coding) is still worth requesting for the missing keys, so this
+    is key-aware rather than model-aware.
+    """
     requests: list[AgentRequest] = []
 
     for record in catalog.models:
@@ -44,28 +59,35 @@ def build_requests(
             )
             continue
 
-        if record.name not in benchmarks:
+        existing = benchmarks.get(record.name)
+        if existing is not None and existing.source == "not_found":
+            continue  # already investigated; do not ask again
+
+        missing = [key for key in BENCHMARK_KEYS if existing is None or key not in existing.scores]
+        if missing:
             requests.append(
                 AgentRequest(
                     model_name=record.name,
                     model_id=record.model_id,
                     kind="benchmark",
-                    missing=list(BENCHMARK_KEYS),
-                    hints=[_HINTS[key] for key in BENCHMARK_KEYS],
+                    missing=missing,
+                    hints=[_HINTS[key] for key in missing],
                 )
             )
 
     return requests
 
 
-def render_request(request: AgentRequest) -> str:
+def render_request(request: AgentRequest, worklist: str = WORKLIST_NAME) -> str:
+    target = f"{OVERRIDES_DIR.as_posix()}/{slug(request.model_name)}.json"
     lines = [
         f"# Benchmark data needed: {request.model_name}",
         "",
         f"- kind: `{request.kind}`",
-        f"- model name: `{request.model_name}`",
+        f"- model name (copy verbatim): `{request.model_name}`",
         f"- model id: `{request.model_id or 'unknown'}`",
-        f"- missing: {', '.join(f'`{m}`' for m in request.missing)}",
+        f"- missing keys: {', '.join(f'`{m}`' for m in request.missing)}",
+        f"- target file: `{target}`",
         "",
         "## Where to look",
         "",
@@ -73,45 +95,178 @@ def render_request(request: AgentRequest) -> str:
     lines += [f"- {hint}" for hint in request.hints]
     lines += [
         "",
-        "## How to answer",
+        "## What to write",
         "",
-        f"Write `data/overrides/{_slug(request.model_name)}.json`:",
+        f"Follow `{worklist}` for the exact JSON format and the hard rules. In short:",
         "",
-        "```json",
-        json.dumps(
-            {
-                "model_name": request.model_name,
-                "scores": {key: 0.0 for key in request.missing},
-                "source": "<url or citation>",
-                "as_of": "<YYYY-MM-DD>",
-            },
-            indent=2,
-        ),
-        "```",
-        "",
-        "Only fill a value you can cite. Leave a key out rather than guessing:",
-        "an absent score is honest, an invented one is worse than useless.",
+        f"- create `{target}`;",
+        f"- set `model_name` to `{request.model_name}` verbatim;",
+        f"- fill only the keys listed above that you can cite: {', '.join(request.missing)};",
+        "- leave out any key you could not find; never invent a number;",
+        '- if nothing citable exists, write `"scores": {}` with `"status": "not_found"`.',
         "",
     ]
     return "\n".join(lines)
 
 
+def render_worklist(requests: list[AgentRequest]) -> str:
+    """The master instruction file: self-contained, unambiguous."""
+    benchmark_requests = [r for r in requests if r.kind == "benchmark"]
+    other_requests = [r for r in requests if r.kind != "benchmark"]
+
+    out: list[str] = [
+        "# Work list: missing benchmark data for OpenCode Go models",
+        "",
+        "This file is generated by `which-model refresh`. Do not edit it by hand.",
+        "It is addressed to an agent or a human: fill in the missing benchmark",
+        "scores for the models listed below.",
+        "",
+        f"**Pending: {len(benchmark_requests)} model(s).**",
+        "",
+        "## Mission",
+        "",
+        "For each row of the work list, in order:",
+        "",
+        "1. open its request file (column *request file*);",
+        "2. find the missing scores in a citable public source;",
+        "3. write exactly one JSON file at the path in column *create this file*;",
+        "4. repeat until no rows remain.",
+        "",
+        f"The answer files live in `{OVERRIDES_DIR.as_posix()}/` and always win over",
+        "every automatic source. You do not need to touch any code.",
+        "",
+        "## Output format",
+        "",
+        "Create each `<slug>.json` with this exact shape:",
+        "",
+        "```json",
+        "{",
+        '  "model_name": "GLM-5.3",',
+        '  "scores": { "coding": 61.2, "agentic": 48.0 },',
+        '  "source": "https://example.org/leaderboard",',
+        '  "as_of": "2026-09-25"',
+        "}",
+        "```",
+        "",
+        "- The file name and `model_name` must be copied **verbatim** from the",
+        "  work list. They are the keys used to attach the scores; a typo, an",
+        "  accent difference or a changed case means the scores are ignored.",
+        "- `scores` keys are `coding`, `agentic`, `intelligence`, floats on a",
+        "  0-100 scale. Provide only the keys you actually found: a partial",
+        "  answer is useful, an empty one is not.",
+        "- `source` is a URL you actually read. `as_of` is the date you read it.",
+        "",
+        "## Hard rules",
+        "",
+        "- Never invent a number. An absent score is honest; a fabricated one",
+        "  is worse than useless because it will be trusted.",
+        "- Never guess from a similar model name: `GLM-5.3` is not `GLM-5.3-Flash`.",
+        "- Do not convert between metrics silently. If a source reports a metric",
+        "  other than these three, say so in the request file instead.",
+        "",
+        "## If no citable value exists",
+        "",
+        "Write the file with no scores and mark the search as done:",
+        "",
+        "```json",
+        "{",
+        '  "model_name": "<exact name from the work list>",',
+        '  "scores": {},',
+        '  "status": "not_found",',
+        '  "source": "<what you checked, with links>",',
+        '  "as_of": "<YYYY-MM-DD>"',
+        "}",
+        "```",
+        "",
+        "The model will then show `n/a` in the dashboard and will not be",
+        "requested again. Use this only after a real search, never to avoid one.",
+        "",
+        "## Work list",
+        "",
+    ]
+
+    table = Table(("Model name (verbatim)", "slug", "request file", "create this file", "missing"))
+    for request in benchmark_requests:
+        model_slug = slug(request.model_name)
+        table.row(
+            request.model_name,
+            model_slug,
+            f"{REQUEST_DIR.as_posix()}/{model_slug}.md",
+            f"{OVERRIDES_DIR.as_posix()}/{model_slug}.json",
+            ", ".join(request.missing),
+        )
+    out.append(table.render())
+
+    if other_requests:
+        out += [
+            "",
+            "## Gaps that an override cannot fix",
+            "",
+            "These need a change to the tooling or the docs source, not a JSON",
+            "file. Report them; do not try to encode them as overrides.",
+            "",
+        ]
+        for request in other_requests:
+            out.append(f"- `{request.model_name}` — missing {', '.join(request.missing)} ({request.kind})")
+        out.append("")
+
+    out += [
+        "## Verify",
+        "",
+        "Run:",
+        "",
+        "```bash",
+        "which-model check --offline",
+        "```",
+        "",
+        "It exits `0` when nothing is pending. If it still lists models, their",
+        "override file is missing, misnamed, or its `model_name` does not match",
+        "the work list exactly.",
+        "",
+    ]
+    return "\n".join(out)
+
+
+class Table:
+    """Tiny fixed-width markdown table, kept dependency-free."""
+
+    def __init__(self, headers: tuple[str, ...]) -> None:
+        self.headers = headers
+        self.rows: list[tuple[str, ...]] = []
+
+    def row(self, *cells: str) -> None:
+        self.rows.append(tuple(cells))
+
+    def render(self) -> str:
+        widths = [len(h) for h in self.headers]
+        for row in self.rows:
+            for i, cell in enumerate(row):
+                widths[i] = max(widths[i], len(cell))
+
+        def line(cells: tuple[str, ...]) -> str:
+            padded = (cell.ljust(widths[i]) for i, cell in enumerate(cells))
+            return "| " + " | ".join(padded) + " |"
+
+        separator = "| " + " | ".join("-" * width for width in widths) + " |"
+        return "\n".join([line(self.headers), separator, *(line(row) for row in self.rows)])
+
+
 def write_requests(requests: list[AgentRequest], directory: Path = REQUEST_DIR) -> list[Path]:
     directory.mkdir(parents=True, exist_ok=True)
-    expected = {directory / f"{_slug(request.model_name)}.md" for request in requests}
+    expected = {directory / f"{slug(request.model_name)}.md" for request in requests}
 
     # Drop requests that no longer apply so the directory reflects reality.
     for path in directory.glob("*.md"):
+        if path.name == WORKLIST_NAME:
+            continue
         if path not in expected:
             path.unlink()
 
     written: list[Path] = []
     for request in requests:
-        path = directory / f"{_slug(request.model_name)}.md"
+        path = directory / f"{slug(request.model_name)}.md"
         path.write_text(render_request(request))
         written.append(path)
+
+    (directory / WORKLIST_NAME).write_text(render_worklist(requests))
     return written
-
-
-def _slug(name: str) -> str:
-    return name.strip().lower().replace(" ", "-")

@@ -73,16 +73,23 @@ beats no dashboard.
 
 ## Handing work to an agent
 
-When something cannot be resolved deterministically, the pipeline writes a
-structured request to `data/agent-requests/<model>.md` and `check` exits
-non-zero:
+When something cannot be resolved deterministically, `refresh` writes:
+
+- **`data/agent-requests/README.md`** — the master instruction file. It is
+  self-contained: mission, exact output JSON shape, hard rules, the full work
+  list with verbatim model names and target paths, and how to verify. This is
+  the file to hand to an agent;
+- `data/agent-requests/<slug>.md` — one file per model with its specifics
+  (missing keys, where to look, target path).
+
+`check` exits non-zero and points at the master file:
 
 ```bash
 uv run which-model check          # exit 1 and list the gaps
 uv run which-model check --json   # machine-readable
 ```
 
-A human or an agent answers by writing `data/overrides/<model>.json`:
+A human or an agent answers by writing `data/overrides/<slug>.json`:
 
 ```json
 {
@@ -93,11 +100,23 @@ A human or an agent answers by writing `data/overrides/<model>.json`:
 }
 ```
 
-Overrides always win. Only citable values belong there: **an absent score is
-honest, an invented one is worse than useless**. Matching is deliberately
-strict — an alias (`data/aliases.json`), an exact id, or an unambiguous
-creator-prefixed slug. There is no fuzzy matching, so `GLM-5.3` can never
-inherit `GLM-5.3-Flash` scores.
+Requests are **per score key**: a model Artificial Analysis covers only for
+`intelligence` is still requested for `coding` and `agentic`.
+
+If a real search finds nothing citable, the agent writes an empty answer
+instead of a guess:
+
+```json
+{ "model_name": "GLM-5.3", "scores": {}, "status": "not_found",
+  "source": "<what was checked>", "as_of": "2026-09-25" }
+```
+
+The model then shows `n/a` and is not requested again. Overrides always win.
+Only citable values belong there: **an absent score is honest, an invented one
+is worse than useless**. Matching is deliberately strict — an alias
+(`data/aliases.json`), an exact id, or an unambiguous creator-prefixed slug.
+There is no fuzzy matching, so `GLM-5.3` can never inherit `GLM-5.3-Flash`
+scores.
 
 ## Artificial Analysis
 

@@ -51,7 +51,11 @@ AA_JSON = json.dumps(
                 "slug": "glm-5.3-flash",
                 "name": "GLM-5.3-Flash",
                 "model_creator": {"name": "Z.ai"},
-                "evaluations": {"artificial_analysis_coding_index": 50.0, "artificial_analysis_agentic_index": 44.0},
+                "evaluations": {
+                    "artificial_analysis_coding_index": 50.0,
+                    "artificial_analysis_agentic_index": 44.0,
+                    "artificial_analysis_intelligence_index": 39.0,
+                },
             }
         ],
     }

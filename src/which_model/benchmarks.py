@@ -111,6 +111,18 @@ def resolve(
             contributors.append("override")
 
         if not merged:
+            if record.name in overrides:
+                # The agent investigated and found nothing citable. Record it
+                # so the model is not requested forever, but keep the scores
+                # empty: nothing is invented.
+                resolution.records[record.name] = BenchmarkRecord(
+                    model_name=record.name,
+                    scores={},
+                    source="not_found",
+                    as_of=datetime.now(UTC).date(),
+                    confidence="override",
+                )
+                continue
             resolution.unresolved.append(record.name)
             continue
 

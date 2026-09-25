@@ -129,6 +129,7 @@ def _source_tag(source: str | None) -> str:
         "seed": "seed",
         "override": "override",
         "mixed": "mixed",
+        "not_found": "n/a",
         None: "—",
     }.get(source, source or "—")
 
@@ -154,11 +155,15 @@ def render(console: Console, rows: list[Row], baseline: int | None, view: str, p
 
 
 def _header(rows: list[Row], baseline: int | None, pending: int) -> Panel:
-    resolved = sum(1 for row in rows if row.benchmark)
+    scored = sum(1 for row in rows if row.benchmark and row.benchmark.scores)
+    not_found = sum(1 for row in rows if row.benchmark and row.benchmark.source == "not_found")
     text = Text()
     text.append(f"{len(rows)} models", style="bold")
     text.append("  ·  ")
-    text.append(f"{resolved} with benchmark scores", style="green" if resolved else "yellow")
+    text.append(f"{scored} with benchmark scores", style="green" if scored else "yellow")
+    if not_found:
+        text.append("  ·  ")
+        text.append(f"{not_found} searched, no citable source", style="dim")
     if pending:
         text.append("  ·  ")
         text.append(f"{pending} awaiting an agent", style="yellow")
