@@ -113,6 +113,7 @@ def check(
 
     if as_json:
         console.print_json(json.dumps([request.model_dump(mode="json") for request in snapshot.requests]))
+        raise typer.Exit(code=1 if snapshot.requests else 0)
 
     if not snapshot.requests:
         console.print("[green]Nothing pending: every model is resolved.[/green]")
