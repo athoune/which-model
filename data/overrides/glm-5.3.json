@@ -1,0 +1,10 @@
+{
+  "model_name": "GLM-5.3",
+  "scores": {
+    "coding": 74.8,
+    "agentic": 59.1,
+    "intelligence": 45
+  },
+  "source": "AA Coding Index: https://benchlm.ai/benchmarks/aacodingindex (#13, 74.8%), AA Agentic Index: https://benchlm.ai/benchmarks/aaagenticindex (#4, 59.1%), AA Intelligence Index: https://artificialanalysis.ai/models/glm-5-3 (45)",
+  "as_of": "2026-09-25"
+}

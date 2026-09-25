@@ -1,0 +1,10 @@
+{
+  "model_name": "Muse Spark 1.2 Contributor",
+  "scores": {
+    "coding": 72.2,
+    "agentic": 57.0,
+    "intelligence": 57
+  },
+  "source": "AA Coding Index: https://benchlm.ai/benchmarks/aacodingindex (#18 as 'Muse Spark 1.2', 72.2%), AA Agentic Index: https://benchlm.ai/benchmarks/aaagenticindex (as 'Muse Spark 1.2', ~57.0%), AA Intelligence Index: https://artificialanalysis.ai/models/muse-spark-1-2 (57)",
+  "as_of": "2026-09-25"
+}

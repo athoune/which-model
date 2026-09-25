@@ -1,0 +1,7 @@
+{
+  "model_name": "LongCat-2.0",
+  "scores": {},
+  "status": "not_found",
+  "source": "Thoroughly searched AA Coding Index (https://benchlm.ai/benchmarks/aacodingindex, 102 models, LongCat-2.0 not listed), AA Agentic Index (https://benchlm.ai/benchmarks/aaagenticindex, 92 models, not listed). Self-reported Terminal-Bench 2.1 score of 70.8% and SWE-bench Pro 59.5% found at https://www.longcatai.org/benchmarks but these are self-reported, not independently verified by AA.",
+  "as_of": "2026-09-25"
+}

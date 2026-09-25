@@ -1,0 +1,7 @@
+{
+  "model_name": "Grok 4.7",
+  "scores": {},
+  "status": "not_found",
+  "source": "Thoroughly searched AA Coding Index (https://benchlm.ai/benchmarks/aacodingindex, 102 models, not listed) and AA Agentic Index (https://benchlm.ai/benchmarks/aaagenticindex, 92 models, not listed). Model released Sept 21, 2026 - very recent. Grok 4.7 + Grok Build scores 56 on AA Coding Agent Index (https://artificialanalysis.ai/articles/benchmarking-grok-4-7) but that is agent+harness combined, not model-only.",
+  "as_of": "2026-09-25"
+}

@@ -1,0 +1,7 @@
+{
+  "model_name": "Hy4 preview",
+  "scores": {},
+  "status": "not_found",
+  "source": "Checked Artificial Analysis - no model page found for 'Hy4 preview'. BenchLM AA Coding Index (https://benchlm.ai/benchmarks/aacodingindex) lists 'Hy3 Preview' (#39, 58.8%) and 'Hy3' (#38, 58.8%) but not 'Hy4 preview'. AA Agentic Index (https://benchlm.ai/benchmarks/aaagenticindex) - not found. News article mentions Hy4 preview DeepSWE score of 64.3 (https://www.scmp.com/tech/big-tech/article/3366068/tencents-hy4-model-gains-open-source-ai-rankings-after-ecosystem-driven-training) but no AA Coding/Agentic Index score found.",
+  "as_of": "2026-09-25"
+}

@@ -1,0 +1,10 @@
+{
+  "model_name": "MiMo-V2.5-Pro",
+  "scores": {
+    "coding": 60.2,
+    "agentic": 29.5,
+    "intelligence": 26
+  },
+  "source": "AA Coding Index: https://benchlm.ai/benchmarks/aacodingindex (#37, 60.2%), AA Agentic Index: https://benchlm.ai/benchmarks/aaagenticindex (#44, 29.5%), AA Intelligence Index: https://artificialanalysis.ai/models/mimo-v2-5-pro (26)",
+  "as_of": "2026-09-25"
+}
