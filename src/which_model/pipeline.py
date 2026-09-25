@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
+
 from . import agent, benchmarks
 from . import catalog as catalog_mod
 from .fetch import Fetcher
@@ -118,7 +120,7 @@ def _load_aa(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> tuple[lis
             if not aa_mod.has_more(fetched.text):
                 break
             page += 1
-    except Exception as error:  # noqa: BLE001 - a bad key must not kill refresh
+    except (httpx.HTTPError, json.JSONDecodeError) as error:
         warnings.append(f"Artificial Analysis fetch failed: {error}")
         return [], False
     return entries, True

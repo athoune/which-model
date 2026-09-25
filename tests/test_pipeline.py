@@ -11,6 +11,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
+
 from which_model import pipeline
 from which_model.fetch import Fetched
 
@@ -132,3 +134,20 @@ def test_stale_cache_warning_is_surfaced(monkeypatch, tmp_path):
     snapshot = pipeline.refresh(tmp_path)
     assert len(snapshot.warnings) == 3
     assert all("stale" in warning for warning in snapshot.warnings)
+
+
+def test_aa_http_error_does_not_kill_refresh(monkeypatch, tmp_path):
+    class FailingAAFetcher(FakeFetcher):
+        def get(self, url, *, force=False, headers=None):
+            if "artificialanalysis" in url:
+                raise httpx.HTTPError("mock Artificial Analysis failure")
+            return super().get(url, force=force, headers=headers)
+
+    monkeypatch.setattr(pipeline, "Fetcher", FailingAAFetcher)
+    monkeypatch.setenv("AA_API_KEY", "test-key")
+
+    snapshot = pipeline.refresh(tmp_path, now=datetime(2026, 9, 25, tzinfo=UTC))
+
+    assert snapshot.aa_available is False
+    assert any("Artificial Analysis fetch failed" in warning for warning in snapshot.warnings)
+    assert len(snapshot.catalog.models) == 33
