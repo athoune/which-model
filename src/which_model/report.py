@@ -32,6 +32,12 @@ SCORE_COLUMNS = (("coding", "coding"), ("agentic", "agentic"))
 # point or two are not meaningful (see the SWE-bench significance analysis).
 TIER_GAP = 2.0
 
+# Model names are ellipsised rather than wrapped. Once the numbers are as
+# short as they can get, the model column is the only one left to give up, so
+# the compact layout trims it by five characters to fit an 80-column terminal.
+MODEL_MAX_WIDTH = 26
+MODEL_MAX_WIDTH_NARROW = 21
+
 
 @dataclass
 class Row:
@@ -282,7 +288,13 @@ def _build_budget_table(rows: list[Row], *, compact: bool) -> Table:
         pad_edge=False,
         expand=False,
     )
-    table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
+    table.add_column(
+        "Model",
+        style="bold",
+        no_wrap=True,
+        overflow="ellipsis",
+        max_width=MODEL_MAX_WIDTH_NARROW if compact else MODEL_MAX_WIDTH,
+    )
     table.add_column("Allow", justify="right", no_wrap=True)
     table.add_column("$/M", justify="right", no_wrap=True, style="dim")
     table.add_column("Verb", justify="right", no_wrap=True)
@@ -321,7 +333,7 @@ def _verbosity_table(rows: list[Row], baseline: int | None) -> Table:
         box=None,
         pad_edge=False,
     )
-    table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
+    table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=MODEL_MAX_WIDTH)
     table.add_column("out tok/task", justify="right", no_wrap=True)
     table.add_column("index", justify="right", no_wrap=True)
     table.add_column("share of cost", justify="left", no_wrap=True)
@@ -373,7 +385,13 @@ def _cost_breakdown(row: Row, width: int = 20) -> str:
 def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
     table = Table(title="Performance: coding tiers (gaps under 2 points are one tier)", box=None, pad_edge=False)
     table.add_column("Tier", justify="right", style="bold", no_wrap=True)
-    table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
+    table.add_column(
+        "Model",
+        style="bold",
+        no_wrap=True,
+        overflow="ellipsis",
+        max_width=MODEL_MAX_WIDTH_NARROW if compact else MODEL_MAX_WIDTH,
+    )
     table.add_column("coding", justify="right", no_wrap=True)
     table.add_column("agentic", justify="right", no_wrap=True)
     table.add_column("¢/task", justify="right", no_wrap=True)

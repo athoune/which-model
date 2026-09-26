@@ -7,10 +7,11 @@ fixtures exist only to exercise the rendering and ranking logic.
 from __future__ import annotations
 
 from io import StringIO
+from pathlib import Path
 
 from rich.console import Console
 
-from which_model import report
+from which_model import pipeline, report
 from which_model.schemas import (
     BenchmarkRecord,
     Catalog,
@@ -138,6 +139,28 @@ def test_narrow_terminal_switches_quotas_to_kilo_tasks():
     # the legend must not let a "k" pass unnoticed
     assert "kilo-tasks" in narrow
     assert "kilo-tasks" not in wide
+
+
+def test_budget_fits_an_eighty_column_terminal():
+    """The compact layout has to hold a whole 80-column terminal, not shrink to it.
+
+    Deliberately run on the shipped catalog: synthetic model names are far too
+    short to expose the widths this behaviour is about. If a new catalog value
+    ever widens a column past 80, this is the test that says so.
+    """
+    root = Path(__file__).resolve().parent.parent
+    rows, _baseline = report.build_rows(pipeline.load_catalog(root), pipeline.load_benchmarks(root))
+
+    narrow = report._build_budget_table(rows, compact=True)
+    assert report._natural_width(narrow) <= 80
+
+    stream = StringIO()
+    report.render(Console(file=stream, width=80, force_terminal=False), rows, _baseline, "budget", pending=0)
+    # everything printed above the legend panel is the table itself
+    table_only = stream.getvalue().split("Legend")[0]
+    assert "¢/task" in table_only  # header survives, no '¢/ta…'
+    assert "227k" in table_only  # widest quota is the compacted one
+    assert "226,586" not in table_only
 
 
 def test_zero_baseline_does_not_crash():
