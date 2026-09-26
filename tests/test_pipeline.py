@@ -90,7 +90,9 @@ def test_refresh_without_aa_key_resolves_nothing_and_asks_an_agent(monkeypatch, 
     monkeypatch.setattr(pipeline, "Fetcher", FakeFetcher)
     monkeypatch.delenv("AA_API_KEY", raising=False)
 
-    snapshot = pipeline.refresh(tmp_path)
+    # The snapshot directory is the refresh date: pin it so the assertion below
+    # keeps passing the day after this test was written.
+    snapshot = pipeline.refresh(tmp_path, now=datetime(2026, 9, 25, tzinfo=UTC))
 
     assert len(snapshot.catalog.models) == 33
     assert snapshot.benchmarks == {}
