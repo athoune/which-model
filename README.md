@@ -16,6 +16,66 @@ uv run which-model refresh    # fetch + normalise (network, no LLM)
 uv run which-model report     # render the dashboard
 ```
 
+```
+
+╭───────────────────────────────────────────────── which-model · OpenCode Go ──────────────────────────────────────────────────╮
+│ 33 models  ·  29 with benchmark scores  ·  4 searched, no citable source  ·  6 awaiting an agent  ·  verbosity baseline 200  │
+│ output tokens                                                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                         Budget: what one task costs inside the Go allowance
+Model                       Allow $   In/Out $/M  Verb     $/task  tasks/5h  tasks/mo  coding  source
+★ Muse Spark 1.3 Contribu…       60      0.1/0.2   150  $0.000265    45,317   226,586    75.8  aa
+  Muse Spark 1.2 Contribu…       60      0.1/0.2   150  $0.000265    45,317   226,586    72.2  aa
+  MiMo-V2.6-Flash                60    0.14/0.28   148  $0.000399    30,075   150,376       -  n/a
+  MiMo-V2.5                      60    0.14/0.28   148  $0.000399    30,075   150,376    56.8  aa
+  DeepSeek V4.1 Flash            60     0.15/0.6   155  $0.000461    26,008   130,039       -  aa
+  DeepSeek V4 Flash              30     0.15/0.6   155  $0.000461    13,004    65,020    69.1  aa
+  LongCat-2.0                    60      0.3/1.2   100   $0.00105    11,435    57,176    45.3  aa
+  DeepSeek V4 Flash Visio…       15     0.15/0.6   155  $0.000461     6,502    32,510    65.0  aa
+  GLM-5.3-Flash                  60     0.15/0.5   100   $0.00190     6,316    31,579    71.5  aa
+  Qwen3.8 Flash                  30    0.15/0.47   100   $0.00111     5,396    26,978       -  n/a
+  Qwen3.7 Plus                   60      0.4/1.6    95   $0.00278     4,310    21,552    55.9  aa
+  Hy3                            60    0.14/0.58   148   $0.00279     4,301    21,507    58.8  aa
+  GPT 6 Luna                     15      0.1/0.5   110  $0.000710     4,225    21,127       -  aa
+  MiniMax M2.7                   60      0.3/1.2    62   $0.00354     3,390    16,949    52.6  aa
+  Qwen3.6 Plus                   60        0.5/3    95   $0.00367     3,270    16,349    54.5  aa
+  MiMo-V2.6-Pro                  15   0.435/0.87   152  $0.000921     3,258    16,291       -  aa
+  MiMo-V2.5-Pro                  15   0.435/0.87   152  $0.000921     3,258    16,291    60.2  aa
+  MiniMax M3                     60      0.3/1.2    95   $0.00374     3,208    16,038    58.6  aa
+  GPT 5.6 Luna                   15      0.2/1.2   110   $0.00146     2,049    10,246    71.4  aa
+  Hy4 preview                    30  0.834/2.501   148   $0.00443     1,353     6,767       -  n/a
+  Kimi K2.6                      60       0.95/4   100    $0.0104     1,151     5,755    61.8  aa
+  DeepSeek V4 Pro                15    0.66/1.98   145   $0.00287     1,044     5,221    68.8  aa
+  Kimi K2.7 Code                 60       0.95/4   100    $0.0121       994     4,968    60.8  aa
+  GLM-5.2                        60      1.4/4.4    75    $0.0152       792     3,958    68.8  aa
+  GLM-5.1                        60      1.4/4.4    75    $0.0152       792     3,958    55.8  aa
+  GLM-5.3                        15      1.4/4.4    75    $0.0152       198       989    74.8  aa
+  Grok 4.7                       15          2/6    60    $0.0177       169       845       -  aa
+★ Grok 4.6                       15          2/6    60    $0.0177       169       845    76.8  aa
+  Qwen3.7 Max                    30      2.5/7.5   100    $0.0355       169       844    66.0  aa
+  Qwen3.8 Max                    15          2/6   100    $0.0185       162       809    76.2  aa
+  Kimi K3                        15         3/15   150    $0.0306        98       490    76.2  aa
+  MiniMax M2.5                   60      0.3/1.2     -          -         -         -       -  aa
+  Space Bunny Free            unlim          0/0     -          -         ∞         ∞       -  n/a
+╭─────────────────────────────────────────────────────────── Legend ───────────────────────────────────────────────────────────╮
+│ ★  Pareto frontier: no other model is both cheaper AND better scored                                                         │
+│                                                                                                                              │
+│ Model       model name; a ★ prefix marks the Pareto frontier (see above)                                                     │
+│ Allow $     monthly included usage for that model: $15, $30, $60 or unlimited                                                │
+│ In/Out $/M  token price per million tokens, input / output                                                                   │
+│ Verb        verbosity index: 100 = median output length across models                                                        │
+│ $/task      cost of ONE task, counted in allowance dollars — not money you pay                                               │
+│ tasks/5h    tasks that fit in the 5-hour window (20% of the allowance)                                                       │
+│ tasks/mo    tasks that fit in the monthly window (100% of the allowance)                                                     │
+│ coding      benchmark score, 0-100. '-' = not resolved yet                                                                   │
+│ source      where the score comes from: see the source legend below                                                          │
+│                                                                                                                              │
+│ source: aa = Artificial Analysis · seed = curated seed · override = human/agent · n/a = searched, nothing citable · mixed =  │
+│ several of these                                                                                                             │
+│ verbosity baseline: 100 on the index = 200 output tokens per task                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## Views
 
 ```bash
