@@ -116,22 +116,22 @@ STAR_LEGEND = "★  Pareto frontier: no other model is both cheaper AND better s
 
 BUDGET_LEGEND = (
     ("Model", "model name; a ★ prefix marks the Pareto frontier (see above)"),
-    ("Allow $", "monthly included usage for that model: $15, $30, $60 or unlimited"),
-    ("In/Out $/M", "token price per million tokens, input / output"),
+    ("Allow", "monthly included usage for that model, in dollars: $15, $30, $60 or unlimited"),
+    ("$/M", "token price per million tokens, input / output"),
     ("Verb", "verbosity index: 100 = median output length across models"),
-    ("$/task", "cost of ONE task, counted in allowance dollars — not money you pay"),
-    ("tasks/5h", "tasks that fit in the 5-hour window (20% of the allowance)"),
-    ("tasks/mo", "tasks that fit in the monthly window (100% of the allowance)"),
+    ("¢/task", "cost of ONE task, counted in allowance cents — not money you pay"),
+    ("5h", "tasks that fit in the 5-hour window (20% of the allowance)"),
+    ("/mo", "tasks that fit in the monthly window (100% of the allowance)"),
     ("coding", "benchmark score, 0-100. '-' = not resolved yet"),
-    ("source", "where the score comes from: see the source legend below"),
+    ("src", "where the score comes from: see the source legend below"),
 )
 
 VERBOSITY_LEGEND = (
     ("out tok/task", "average output tokens per request: the verbosity signal"),
     ("index", "same value normalised, 100 = median output length across models"),
     ("share of cost", "split of one task's cost: in = fresh input, cache = cached input, out = output"),
-    ("$/task", "cost of one task in allowance dollars"),
-    ("$/task x2 out", "same task with twice the output length"),
+    ("¢/task", "cost of one task in allowance cents"),
+    ("¢/task x2 out", "same task with twice the output length"),
     ("cost rise", "how much more that would cost"),
 )
 
@@ -139,9 +139,9 @@ PERF_LEGEND = (
     ("Tier", "performance tier: scores within 2 points share a tier, because gaps that small are noise"),
     ("coding", "coding benchmark score, 0-100"),
     ("agentic", "agentic/tool-use benchmark score, 0-100"),
-    ("$/task", "cost of one task in allowance dollars"),
-    ("tasks/mo", "tasks that fit in the monthly allowance"),
-    ("source", "where the score comes from: see the source legend below"),
+    ("¢/task", "cost of one task in allowance cents"),
+    ("/mo", "tasks that fit in the monthly allowance"),
+    ("src", "where the score comes from: see the source legend below"),
 )
 
 SOURCE_LEGEND = (
@@ -171,14 +171,19 @@ def _legend(view: str, baseline: int | None) -> Panel:
 
 
 def _task_cost(value: float | None) -> str:
-    """Adaptive precision: a task costs fractions of a cent."""
+    """Cost of one task, in cents.
+
+    One task costs a fraction of a cent in allowance dollars (roughly 0.03¢ to
+    3.6¢ across the catalog), so dollars would need four to six decimals and
+    blow up the column. Cents keep every value at five characters and match how
+    these prices are discussed ("the priciest model is about 3 cents a task").
+    """
     if value is None:
         return "-"
-    if value >= 0.01:
-        return f"${value:,.4f}"
-    if value >= 0.001:
-        return f"${value:,.5f}"
-    return f"${value:,.6f}"
+    cents = value * 100
+    if 0 < cents < 0.01:
+        return "<0.01¢"
+    return f"{cents:.2f}¢"
 
 
 def _source_tag(source: str | None) -> str:
@@ -239,14 +244,14 @@ def _budget_table(rows: list[Row]) -> Table:
         expand=False,
     )
     table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
-    table.add_column("Allow $", justify="right", no_wrap=True)
-    table.add_column("In/Out $/M", justify="right", no_wrap=True, style="dim")
+    table.add_column("Allow", justify="right", no_wrap=True)
+    table.add_column("$/M", justify="right", no_wrap=True, style="dim")
     table.add_column("Verb", justify="right", no_wrap=True)
-    table.add_column("$/task", justify="right", no_wrap=True)
-    table.add_column("tasks/5h", justify="right", no_wrap=True)
-    table.add_column("tasks/mo", justify="right", no_wrap=True)
+    table.add_column("¢/task", justify="right", no_wrap=True)
+    table.add_column("5h", justify="right", no_wrap=True)
+    table.add_column("/mo", justify="right", no_wrap=True)
     table.add_column("coding", justify="right", no_wrap=True, style="magenta")
-    table.add_column("source", no_wrap=True, style="dim")
+    table.add_column("src", no_wrap=True, style="dim")
 
     for row in sorted(rows, key=lambda r: (r.tasks_month is None, -(r.tasks_month or 0))):
         pricing = row.row
@@ -281,8 +286,8 @@ def _verbosity_table(rows: list[Row], baseline: int | None) -> Table:
     table.add_column("out tok/task", justify="right", no_wrap=True)
     table.add_column("index", justify="right", no_wrap=True)
     table.add_column("share of cost", justify="left", no_wrap=True)
-    table.add_column("$/task", justify="right", no_wrap=True)
-    table.add_column("$/task x2 out", justify="right", no_wrap=True)
+    table.add_column("¢/task", justify="right", no_wrap=True)
+    table.add_column("¢/task x2 out", justify="right", no_wrap=True)
     table.add_column("cost rise", justify="right", no_wrap=True, style="yellow")
 
     for row in sorted(rows, key=lambda r: (r.verbosity is None, -(r.verbosity or 0))):
@@ -332,9 +337,9 @@ def _perf_table(rows: list[Row]) -> Table:
     table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
     table.add_column("coding", justify="right", no_wrap=True)
     table.add_column("agentic", justify="right", no_wrap=True)
-    table.add_column("$/task", justify="right", no_wrap=True)
-    table.add_column("tasks/mo", justify="right", no_wrap=True)
-    table.add_column("source", style="dim", no_wrap=True)
+    table.add_column("¢/task", justify="right", no_wrap=True)
+    table.add_column("/mo", justify="right", no_wrap=True)
+    table.add_column("src", style="dim", no_wrap=True)
 
     ranked = sorted(
         (r for r in rows if r.benchmark),
