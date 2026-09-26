@@ -150,7 +150,7 @@ SOURCE_LEGEND = (
 )
 
 
-def _legend(view: str, baseline: int | None) -> Panel:
+def _legend(view: str, baseline: int | None, compact: bool = False) -> Panel:
     entries = {
         "budget": BUDGET_LEGEND,
         "verbosity": VERBOSITY_LEGEND,
@@ -162,8 +162,11 @@ def _legend(view: str, baseline: int | None) -> Panel:
         "",
         *[f"[bold]{label.ljust(width)}[/bold]  {text}" for label, text in entries],
         "",
-        SOURCE_LEGEND,
     ]
+    if compact:
+        lines.append("narrow terminal: the 5h and /mo quotas are in kilo-tasks, k = 1000 tasks")
+        lines.append("")
+    lines.append(SOURCE_LEGEND)
     if baseline is not None:
         lines.append(f"verbosity baseline: 100 on the index = {baseline} output tokens per task")
     return Panel(Group(*[Text.from_markup(line) for line in lines]), title="Legend", border_style="dim")
@@ -201,21 +204,57 @@ def _number(value: float | None) -> str:
     return "-" if value is None else f"{value:,.0f}"
 
 
-def _tasks(value: float | None, unlimited: bool) -> str:
-    return "∞" if unlimited else _number(value)
+def _tasks(value: float | None, unlimited: bool, compact: bool = False) -> str:
+    if unlimited:
+        return "∞"
+    if value is None:
+        return "-"
+    if compact and value >= 1000:
+        return _kilo_tasks(value)
+    return f"{value:,.0f}"
+
+
+def _kilo_tasks(value: float) -> str:
+    """Kilo-tasks for the narrow layout: 226,586 -> 227k, 45,317 -> 45k.
+
+    Below 1000 the plain number is already shorter than any suffixed form, so
+    the caller only routes values that actually shrink onto this function.
+    """
+    if value >= 10_000:
+        return f"{value / 1000:.0f}k"
+    return f"{value / 1000:.1f}k"
+
+
+def _natural_width(table: Table) -> int:
+    """Intrinsic width a table needs, independent of the console width."""
+    return Console(width=10_000, force_terminal=False).measure(table).maximum
+
+
+def _table(
+    rows: list[Row], baseline: int | None, view: str, width: int
+) -> tuple[Table, bool]:
+    """The view's table, plus whether its quotas were switched to kilo-tasks.
+
+    Whether the terminal is "too thin" is read off the table's own intrinsic
+    width instead of a hardcoded column count, so it keeps working when the
+    catalog (or its longest model name) changes.
+    """
+    if view == "verbosity":
+        return _verbosity_table(rows, baseline), False
+    build = {"budget": _build_budget_table, "perf": _build_perf_table}.get(view)
+    if build is None:
+        raise ValueError(f"unknown view {view!r}")
+    table = build(rows, compact=False)
+    if _natural_width(table) <= width:
+        return table, False
+    return build(rows, compact=True), True
 
 
 def render(console: Console, rows: list[Row], baseline: int | None, view: str, pending: int = 0) -> None:
     console.print(_header(rows, baseline, pending))
-    if view == "budget":
-        console.print(_budget_table(rows))
-    elif view == "verbosity":
-        console.print(_verbosity_table(rows, baseline))
-    elif view == "perf":
-        console.print(_perf_table(rows))
-    else:
-        raise ValueError(f"unknown view {view!r}")
-    console.print(_legend(view, baseline))
+    table, compact = _table(rows, baseline, view, console.width)
+    console.print(table)
+    console.print(_legend(view, baseline, compact))
 
 
 def _header(rows: list[Row], baseline: int | None, pending: int) -> Panel:
@@ -236,7 +275,7 @@ def _header(rows: list[Row], baseline: int | None, pending: int) -> Panel:
     return Panel(text, title="which-model · OpenCode Go", border_style="cyan")
 
 
-def _budget_table(rows: list[Row]) -> Table:
+def _build_budget_table(rows: list[Row], *, compact: bool) -> Table:
     table = Table(
         title="Budget: what one task costs inside the Go allowance",
         box=None,
@@ -268,8 +307,8 @@ def _budget_table(rows: list[Row]) -> Table:
             prices,
             _number(row.verbosity),
             _task_cost(row.cost),
-            _tasks(row.tasks_5h, unlimited),
-            _tasks(row.tasks_month, unlimited),
+            _tasks(row.tasks_5h, unlimited, compact=compact),
+            _tasks(row.tasks_month, unlimited, compact=compact),
             _score(row, "coding"),
             _source_tag(row.benchmark.source if row.benchmark else None),
         )
@@ -331,7 +370,7 @@ def _cost_breakdown(row: Row, width: int = 20) -> str:
     return "".join(chunks) + "  " + legend
 
 
-def _perf_table(rows: list[Row]) -> Table:
+def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
     table = Table(title="Performance: coding tiers (gaps under 2 points are one tier)", box=None, pad_edge=False)
     table.add_column("Tier", justify="right", style="bold", no_wrap=True)
     table.add_column("Model", style="bold", no_wrap=True, overflow="ellipsis", max_width=26)
@@ -346,13 +385,14 @@ def _perf_table(rows: list[Row]) -> Table:
         key=lambda r: (-(r.benchmark.scores.get("coding") or 0), r.cost if r.cost is not None else 1e9),
     )
     for row in ranked:
+        unlimited = bool(row.row and row.row.limit.unlimited)
         table.add_row(
             str(row.tier or "?"),
             ("★ " if row.pareto else "  ") + row.model.name,
             _score(row, "coding"),
             _score(row, "agentic"),
             _task_cost(row.cost),
-            _number(row.tasks_month),
+            _tasks(row.tasks_month, unlimited, compact=compact),
             _source_tag(row.benchmark.source),
         )
     return table

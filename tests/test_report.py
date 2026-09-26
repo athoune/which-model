@@ -91,10 +91,10 @@ def test_tiers_group_close_scores():
     assert by_name["No Score"].tier is None
 
 
-def _render_catalog(catalog, benchmarks, view: str) -> str:
+def _render_catalog(catalog, benchmarks, view: str, width: int = 140) -> str:
     rows, baseline = report.build_rows(catalog, benchmarks)
     stream = StringIO()
-    console = Console(file=stream, width=140, force_terminal=False)
+    console = Console(file=stream, width=width, force_terminal=False)
     report.render(console, rows, baseline, view, pending=1)
     return stream.getvalue()
 
@@ -118,6 +118,26 @@ def test_legend_entries_correspond_to_real_columns():
         before_legend = _render(view).split("Legend")[0]
         for label, _ in entries:
             assert label in before_legend, (view, label)
+
+
+def test_narrow_terminal_switches_quotas_to_kilo_tasks():
+    """A tight terminal saves itself with the widest cells first.
+
+    The task quotas are seven characters (`428,571`) and are therefore the
+    first to be ellipsised; in kilo-tasks the same row is `429k`. A terminal
+    that has room to spare must keep the exact figure.
+    """
+    catalog, benchmarks = sample_catalog()
+    wide = _render_catalog(catalog, benchmarks, "budget", width=140)
+    narrow = _render_catalog(catalog, benchmarks, "budget", width=70)
+
+    assert "428,571" in wide
+    assert "428,571" not in narrow
+    assert "429k" in narrow
+    assert "429k" not in wide
+    # the legend must not let a "k" pass unnoticed
+    assert "kilo-tasks" in narrow
+    assert "kilo-tasks" not in wide
 
 
 def test_zero_baseline_does_not_crash():
