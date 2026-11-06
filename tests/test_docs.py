@@ -128,3 +128,45 @@ def test_golden_requests_match_published_numbers(docs):
             assert abs(delta) <= 1.5, (model.name, published, round(computed), delta)
 
     assert checked == 31
+
+
+# The docs render the Go, Go Plus and Go Teams tables side by side inside
+# ``<PlanTabs>``. Only the Go tab describes the $10/month plan this dashboard
+# models, and reading a neighbouring tab would make every budget number wrong.
+PLAN_TABS_BODY = """<PlanTabs id="go-pricing" label="Go plan">
+  <div slot="go">
+
+    | Model | Input | Output | Cached Read | Cached Write | Monthly limit |
+    | ----- | ----- | ------ | ----------- | ------------ | ------------- |
+    | A     | $1.00 | $2.00  | $0.10       | -            | **$10**       |
+
+  </div>
+  <div slot="go-plus">
+
+    | Model | Input | Output | Cached Read | Cached Write | Monthly limit |
+    | ----- | ----- | ------ | ----------- | ------------ | ------------- |
+    | A     | $1.00 | $2.00  | $0.10       | -            | **$40**       |
+
+  </div>
+</PlanTabs>
+"""
+
+
+def test_plan_tabs_expose_their_slot():
+    from which_model.docs import parse_tables
+
+    slots = [table.slot for table in parse_tables(PLAN_TABS_BODY)]
+    assert slots == ["go", "go-plus"]
+
+
+def test_only_the_go_plan_tab_is_read():
+    docs = parse_go_docs(PLAN_TABS_BODY, source_url="fixture")
+
+    assert len(docs.by_name()["A"].rows) == 1
+    assert docs.by_name()["A"].rows[0].limit.amount_usd == 10
+
+
+def test_a_missing_go_tab_fails_loudly():
+    body = PLAN_TABS_BODY.replace('slot="go"', 'slot="go-something-else"')
+    with pytest.raises(ValueError, match="pricing table not found"):
+        parse_go_docs(body, source_url="fixture")

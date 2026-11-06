@@ -35,9 +35,17 @@ PROFILE_LINE = re.compile(
 
 
 class Table:
-    def __init__(self, headers: list[str], rows: list[list[str]]) -> None:
+    def __init__(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        slot: str | None = None,
+    ) -> None:
         self.headers = headers
         self.rows = rows
+        # Plan tab the table lives in (``go``, ``go-plus``, ``go-teams``), if any.
+        # The docs wrap per-plan tables in ``<PlanTabs>``/``<div slot="...">``.
+        self.slot = slot
 
     def index_of(self, *needles: str) -> int | None:
         for i, header in enumerate(self.headers):
@@ -51,21 +59,38 @@ class Table:
         return None if i is None else [row[i] for row in self.rows]
 
 
+SLOT_DIV = re.compile(r"<div(?P<attrs>[^>]*)>")
+SLOT_NAME = re.compile(r'\bslot="(?P<slot>[^"]+)"')
+
+
 def parse_tables(body: str) -> list[Table]:
-    """Extract every pipe table from the markdown body."""
+    """Extract every pipe table from the markdown body, noting its plan tab."""
     tables: list[Table] = []
     block: list[list[str]] = []
-    in_separator = False
+    # Open ``<div>`` elements; the value is the slot name when the div declares
+    # one. The docs wrap the per-plan tables of ``<PlanTabs>`` that way.
+    div_stack: list[str | None] = []
+
+    def current_slot() -> str | None:
+        return next((slot for slot in reversed(div_stack) if slot), None)
 
     def flush() -> None:
-        nonlocal block, in_separator
+        nonlocal block
         if len(block) >= 2:
-            tables.append(Table(block[0], block[2:]))
+            tables.append(Table(block[0], block[2:], slot=current_slot()))
         block = []
-        in_separator = False
 
     for line in body.splitlines():
         stripped = line.strip()
+        opened = SLOT_DIV.search(stripped)
+        if opened:
+            name = SLOT_NAME.search(opened.group("attrs"))
+            div_stack.append(name.group("slot") if name else None)
+            continue
+        if stripped.startswith("</div>"):
+            if div_stack:
+                div_stack.pop()
+            continue
         if stripped.startswith("|") and stripped.endswith("|"):
             cells = [c.strip() for c in stripped.strip("|").split("|")]
             if not block:
@@ -200,8 +225,22 @@ def _extract_listed_models(body: str) -> list[str]:
     return re.findall(r"^-\s+\*\*(?P<name>.+?)\*\*", section.group(1), re.MULTILINE)
 
 
-def _table_by_header(tables: list[Table], *needles: str) -> Table | None:
+GO_PLAN_SLOT = "go"
+
+
+def _table_by_header(
+    tables: list[Table], *needles: str, slot: str | None = GO_PLAN_SLOT
+) -> Table | None:
+    """Find the first table with these headers, ignoring other plan tabs.
+
+    The docs render Go, Go Plus and Go Teams tables side by side; only the Go
+    one describes the $10/month plan this dashboard models. Silently reading a
+    neighbouring tab would make every budget number wrong, so a table that only
+    exists in another tab is treated as missing.
+    """
     for table in tables:
+        if slot is not None and table.slot not in (None, slot):
+            continue
         if all(any(needle.lower() in h.lower() for h in table.headers) for needle in needles):
             return table
     return None
