@@ -145,6 +145,7 @@ PERF_LEGEND = (
     ("Tier", "performance tier: scores within 2 points share a tier, because gaps that small are noise"),
     ("coding", "coding benchmark score, 0-100"),
     ("agentic", "agentic/tool-use benchmark score, 0-100"),
+    ("intelligence", "general intelligence benchmark score, 0-100"),
     ("¢/task", "cost of one task in allowance cents"),
     ("/mo", "tasks that fit in the monthly allowance"),
     ("src", "where the score comes from: see the source legend below"),
@@ -411,6 +412,7 @@ def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
     )
     table.add_column("coding", justify="right", no_wrap=True)
     table.add_column("agentic", justify="right", no_wrap=True)
+    table.add_column("intelligence", justify="right", no_wrap=True)
     table.add_column("¢/task", justify="right", no_wrap=True)
     table.add_column("/mo", justify="right", no_wrap=True)
     table.add_column("src", style="dim", no_wrap=True)
@@ -426,6 +428,7 @@ def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
             ("★ " if row.pareto else "  ") + row.model.name,
             _score(row, "coding"),
             _score(row, "agentic"),
+            _score(row, "intelligence"),
             _task_cost(row.cost),
             _tasks(row.tasks_month, unlimited, compact=compact),
             _source_tag(row.benchmark.source, compact=compact),
