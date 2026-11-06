@@ -68,7 +68,14 @@ class FakeFetcher:
     def __init__(self, *args, **kwargs) -> None:
         pass
 
-    def get(self, url: str, *, force: bool = False, headers: dict | None = None) -> Fetched:
+    def get(
+        self,
+        url: str,
+        *,
+        force: bool = False,
+        headers: dict | None = None,
+        allow_stale: bool = True,
+    ) -> Fetched:
         if "go.mdx" in url:
             text = FIXTURE.read_text()
         elif "models.dev" in url:
@@ -125,8 +132,8 @@ def test_refresh_with_aa_key_resolves_scores_and_shrinks_the_queue(monkeypatch, 
 
 def test_stale_cache_warning_is_surfaced(monkeypatch, tmp_path):
     class StaleFetcher(FakeFetcher):
-        def get(self, url, *, force=False, headers=None):
-            fetched = super().get(url, force=force, headers=headers)
+        def get(self, url, *, force=False, headers=None, allow_stale=True):
+            fetched = super().get(url, force=force, headers=headers, allow_stale=allow_stale)
             fetched.stale = True
             return fetched
 
@@ -140,10 +147,10 @@ def test_stale_cache_warning_is_surfaced(monkeypatch, tmp_path):
 
 def test_aa_http_error_does_not_kill_refresh(monkeypatch, tmp_path):
     class FailingAAFetcher(FakeFetcher):
-        def get(self, url, *, force=False, headers=None):
+        def get(self, url, *, force=False, headers=None, allow_stale=True):
             if "artificialanalysis" in url:
                 raise httpx.HTTPError("mock Artificial Analysis failure")
-            return super().get(url, force=force, headers=headers)
+            return super().get(url, force=force, headers=headers, allow_stale=allow_stale)
 
     monkeypatch.setattr(pipeline, "Fetcher", FailingAAFetcher)
     monkeypatch.setenv("AA_API_KEY", "test-key")
@@ -153,3 +160,30 @@ def test_aa_http_error_does_not_kill_refresh(monkeypatch, tmp_path):
     assert snapshot.aa_available is False
     assert any("Artificial Analysis fetch failed" in warning for warning in snapshot.warnings)
     assert len(snapshot.catalog.models) == 33
+
+
+def test_moved_docs_url_falls_back_to_the_next_candidate(monkeypatch, tmp_path):
+    """A 404 on the current docs path must not brick ``refresh``.
+
+    The upstream file already moved once; the fallback keeps the pipeline
+    alive and the resolved URL is recorded so provenance stays honest.
+    """
+
+    class MovedDocsFetcher(FakeFetcher):
+        def get(self, url, *, force=False, headers=None, allow_stale=True):
+            if url == pipeline.DOCS_URL:
+                raise httpx.HTTPStatusError(
+                    "404 Not Found",
+                    request=httpx.Request("GET", url),
+                    response=httpx.Response(404),
+                )
+            return super().get(url, force=force, headers=headers, allow_stale=allow_stale)
+
+    monkeypatch.setattr(pipeline, "Fetcher", MovedDocsFetcher)
+    monkeypatch.delenv("AA_API_KEY", raising=False)
+
+    snapshot = pipeline.refresh(tmp_path, now=datetime(2026, 9, 25, tzinfo=UTC))
+
+    assert len(snapshot.catalog.models) == 33
+    assert snapshot.catalog.refs["docs_url"] == pipeline.DOCS_URL_FALLBACKS[0]
+    assert any("docs source moved" in warning for warning in snapshot.warnings)

@@ -23,7 +23,13 @@ from .schemas import AgentRequest, BenchmarkRecord, Catalog
 from .sources import artificial_analysis as aa_mod
 from .sources import models_dev, zen
 
-DOCS_URL = "https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/web/src/content/docs/go.mdx"
+# The docs source has moved once already (``packages/web`` → ``services/site``).
+# ``DOCS_URL`` is the current location; the fallbacks keep ``refresh`` working
+# across the next move instead of dying on a 404.
+DOCS_URL = "https://raw.githubusercontent.com/anomalyco/opencode/dev/services/site/src/docs/content/console/go.mdx"
+DOCS_URL_FALLBACKS = (
+    "https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/web/src/content/docs/go.mdx",
+)
 
 CATALOG_PATH = Path("data/catalog.json")
 BENCHMARKS_PATH = Path("data/benchmarks.json")
@@ -52,7 +58,10 @@ def refresh(
     fetcher = Fetcher(base_dir / "data" / "cache", ttl=ttl)
 
     sources = _fetch_sources(fetcher, force=force, warnings=warnings)
-    docs = parse_go_docs(sources["docs"].text, source_url=DOCS_URL, source_ref=sources["docs"].sha256)
+    docs_source = sources["docs"]
+    docs = parse_go_docs(
+        docs_source.text, source_url=docs_source.url, source_ref=docs_source.sha256
+    )
     dev_models = models_dev.load(sources["models_dev"].text)
 
     cat = catalog_mod.build_catalog(
@@ -60,8 +69,8 @@ def refresh(
         dev_models,
         zen.load(sources["zen"].text),
         refs={
-            "docs_url": DOCS_URL,
-            "docs_sha256": sources["docs"].sha256,
+            "docs_url": docs_source.url,
+            "docs_sha256": docs_source.sha256,
             "models_dev_sha256": sources["models_dev"].sha256,
             "zen_sha256": sources["zen"].sha256,
             "built_at": now.isoformat(),
@@ -94,7 +103,7 @@ def refresh(
 def _fetch_sources(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> dict[str, Fetched]:
     """Fetch the three deterministic sources, reporting stale fallbacks."""
     sources = {
-        "docs": fetcher.get(DOCS_URL, force=force),
+        "docs": _fetch_docs(fetcher, force=force, warnings=warnings),
         "models_dev": fetcher.get(models_dev.URL, force=force),
         "zen": fetcher.get(zen.URL, force=force),
     }
@@ -102,6 +111,28 @@ def _fetch_sources(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> dic
         if fetched.stale:
             warnings.append(f"using stale cache for {fetched.url}")
     return sources
+
+
+def _fetch_docs(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> Fetched:
+    """Fetch the docs from the first candidate URL that answers.
+
+    Non-final candidates are not allowed to fall back to their stale cache, so
+    that a moved file is not silently masked by an old copy; the last candidate
+    keeps that fallback, so a network outage still yields a stale dashboard.
+    """
+    candidates = (DOCS_URL, *DOCS_URL_FALLBACKS)
+    last_error: httpx.HTTPError | None = None
+    for index, url in enumerate(candidates):
+        try:
+            fetched = fetcher.get(url, force=force, allow_stale=index == len(candidates) - 1)
+        except httpx.HTTPError as error:
+            last_error = error
+            continue
+        if index:
+            warnings.append(f"docs source moved: using {url} instead of {candidates[0]}")
+        return fetched
+    assert last_error is not None
+    raise last_error
 
 
 def _load_aa(fetcher: Fetcher, *, force: bool, warnings: list[str]) -> tuple[list, bool]:
