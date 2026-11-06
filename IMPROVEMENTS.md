@@ -5,9 +5,16 @@ Items marked `[DONE]` have already been addressed.
 
 ## User-visible correctness
 
+- [DONE] **Keep the Pareto frontier alive when `coding` is unresolved.** (Fixed:
+  Artificial Analysis returned `coding: null` and `agentic: null` for every
+  model while still publishing `intelligence`, so the frontier, tiers and the
+  budget score column were all dead. They now rank on the best-covered score
+  axis (`coding` → `agentic` → `intelligence`) and the budget column is named
+  `score` to match.)
+
 - [DONE] **Align the budget view with its legend.** (Fixed: the stale `agentic`
   entry was removed from `BUDGET_LEGEND`; the narrow budget table keeps only the
-  `coding` column, and `agentic` stays documented in the `perf` view. A test now
+  `score` column, and `agentic` stays documented in the `perf` view. A test now
   asserts every legend entry maps to a column that is actually rendered.)
 
 - [DONE] **Avoid double JSON serialization in `check --json`.** (Fixed:

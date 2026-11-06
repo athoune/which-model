@@ -80,9 +80,14 @@ Model                       Allow          $/M  Verb  ¢/task      5h      /mo  
 ```bash
 uv run which-model report --view budget       # ¢/task, tasks per 5h and per month
 uv run which-model report --view verbosity    # output length and its cost impact
-uv run which-model report --view perf         # coding tiers, Pareto frontier
+uv run which-model report --view perf         # performance tiers, Pareto frontier
 uv run which-model report --view provenance   # sources, disagreements, gaps
 ```
+
+Pareto stars and tiers follow the best-covered score axis: `coding` when
+Artificial Analysis publishes it, otherwise `agentic`, then general
+`intelligence`. This keeps the frontier visible when a coding index is still
+unresolved instead of silently marking no model.
 
 Handy flags: `--offline` (never touch the network), `--force` (ignore the
 cache TTL), `--width N` (force output width).
