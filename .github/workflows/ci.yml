@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only: the pipeline is deterministic and calls no LLM, so CI only needs
+# to read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v7
+      # setup-uv publishes no floating `v10` tag; pin the version.
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+      # `--locked` fails on a stale uv.lock instead of silently resolving.
+      - run: uv sync --locked
+      - run: uv run ruff check src tests
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - run: uv sync --locked
+      # Offline by design: the tests stub every HTTP source and fall back to the
+      # pinned catalog fixture when `data/` has not been refreshed.
+      - run: uv run pytest
