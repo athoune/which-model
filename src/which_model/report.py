@@ -28,6 +28,12 @@ from .schemas import BenchmarkRecord, Catalog, ModelRecord, PricingRow
 # Score keys understood by the dashboard, in display order.
 SCORE_COLUMNS = (("coding", "coding"), ("agentic", "agentic"))
 
+# Score axes usable to rank models, most coding-specific first. Artificial
+# Analysis currently leaves coding and agentic null for many models while it
+# still publishes a general intelligence index, so the ranking falls back
+# instead of silently marking nobody.
+RANKING_KEYS = ("coding", "agentic", "intelligence")
+
 # Adjacent scores closer than this are shown as one tier: benchmark gaps of a
 # point or two are not meaningful (see the SWE-bench significance analysis).
 TIER_GAP = 2.0
@@ -79,19 +85,48 @@ def build_rows(
     return rows, baseline
 
 
+def _ranking_key(rows: list[Row]) -> str | None:
+    """The score axis used to rank models.
+
+    The axis with the widest coverage wins, with the coding-specific axes
+    preferred on a tie. That keeps the dashboard useful when a benchmark is
+    only partially resolved, instead of letting one stray coding score hide
+    every model that only has an intelligence score.
+    """
+    counts = {
+        key: sum(
+            1
+            for row in rows
+            if row.benchmark and row.benchmark.scores.get(key) is not None
+        )
+        for key in RANKING_KEYS
+    }
+    best = max(counts.values(), default=0)
+    if not best:
+        return None
+    return next(key for key in RANKING_KEYS if counts[key] == best)
+
+
 def _assign_pareto(rows: list[Row]) -> None:
-    """Mark rows not beaten on both cost and coding score.
+    """Mark rows not beaten on both cost and the ranking score.
 
     Domination uses weak inequalities with at least one strict, so a model
     that is strictly worse at the same cost does not stay on the frontier.
     """
-    scored = [r for r in rows if r.cost is not None and r.benchmark and "coding" in r.benchmark.scores]
+    key = _ranking_key(rows)
+    if key is None:
+        return
+    scored = [
+        r
+        for r in rows
+        if r.cost is not None and r.benchmark and r.benchmark.scores.get(key) is not None
+    ]
     for candidate in scored:
-        coding = candidate.benchmark.scores["coding"]
+        score = candidate.benchmark.scores[key]
         dominated = any(
             other.cost <= candidate.cost
-            and other.benchmark.scores["coding"] >= coding
-            and (other.cost < candidate.cost or other.benchmark.scores["coding"] > coding)
+            and other.benchmark.scores[key] >= score
+            and (other.cost < candidate.cost or other.benchmark.scores[key] > score)
             for other in scored
             if other is not candidate
         )
@@ -100,15 +135,18 @@ def _assign_pareto(rows: list[Row]) -> None:
 
 def _assign_tiers(rows: list[Row]) -> None:
     """Group models into statistically-plausible performance tiers."""
+    key = _ranking_key(rows)
+    if key is None:
+        return
     scored = sorted(
-        (r for r in rows if r.benchmark and "coding" in r.benchmark.scores),
-        key=lambda r: r.benchmark.scores["coding"],
+        (r for r in rows if r.benchmark and r.benchmark.scores.get(key) is not None),
+        key=lambda r: r.benchmark.scores[key],
         reverse=True,
     )
     tier = 0
     previous: float | None = None
     for row in scored:
-        score = row.benchmark.scores["coding"]
+        score = row.benchmark.scores[key]
         if previous is None or previous - score >= TIER_GAP:
             tier += 1
         row.tier = tier
@@ -128,7 +166,7 @@ BUDGET_LEGEND = (
     ("¢/task", "cost of ONE task, counted in allowance cents — not money you pay"),
     ("5h", "tasks that fit in the 5-hour window (20% of the allowance)"),
     ("/mo", "tasks that fit in the monthly window (100% of the allowance)"),
-    ("coding", "benchmark score, 0-100. '-' = not resolved yet"),
+    ("score", "benchmark score, 0-100: coding when available, otherwise general intelligence. '-' = not resolved"),
     ("src", "where the score comes from: see the source legend below"),
 )
 
@@ -319,8 +357,9 @@ def _build_budget_table(rows: list[Row], *, compact: bool) -> Table:
     table.add_column("¢/task", justify="right", no_wrap=True)
     table.add_column("5h", justify="right", no_wrap=True)
     table.add_column("/mo", justify="right", no_wrap=True)
-    table.add_column("coding", justify="right", no_wrap=True, style="magenta")
+    table.add_column("score", justify="right", no_wrap=True, style="magenta")
     table.add_column("src", no_wrap=True, style="dim")
+    score_key = _ranking_key(rows) or "coding"
 
     for row in sorted(rows, key=lambda r: (r.tasks_month is None, -(r.tasks_month or 0))):
         pricing = row.row
@@ -339,7 +378,7 @@ def _build_budget_table(rows: list[Row], *, compact: bool) -> Table:
             _task_cost(row.cost),
             _tasks(row.tasks_5h, unlimited, compact=compact),
             _tasks(row.tasks_month, unlimited, compact=compact),
-            _score(row, "coding"),
+            _score(row, score_key),
             _source_tag(row.benchmark.source if row.benchmark else None, compact=compact),
         )
     return table
@@ -401,7 +440,12 @@ def _cost_breakdown(row: Row, width: int = 20) -> str:
 
 
 def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
-    table = Table(title="Performance: coding tiers (gaps under 2 points are one tier)", box=None, pad_edge=False)
+    score_key = _ranking_key(rows) or "coding"
+    table = Table(
+        title=f"Performance: {score_key} tiers (gaps under 2 points are one tier)",
+        box=None,
+        pad_edge=False,
+    )
     table.add_column("Tier", justify="right", style="bold", no_wrap=True)
     table.add_column(
         "Model",
@@ -419,7 +463,7 @@ def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
 
     ranked = sorted(
         (r for r in rows if r.benchmark),
-        key=lambda r: (-(r.benchmark.scores.get("coding") or 0), r.cost if r.cost is not None else 1e9),
+        key=lambda r: (-(r.benchmark.scores.get(score_key) or 0), r.cost if r.cost is not None else 1e9),
     )
     for row in ranked:
         unlimited = bool(row.row and row.row.limit.unlimited)

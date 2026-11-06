@@ -80,6 +80,34 @@ def test_pareto_marks_only_undominated_models():
     assert by_name["Pricey Great"].pareto is True
 
 
+def test_pareto_falls_back_to_intelligence_when_coding_is_missing():
+    """Artificial Analysis can publish only the intelligence index.
+
+    The frontier must follow the score axis that actually has data, otherwise
+    every star silently disappears when coding/agentic indices are null.
+    """
+    catalog = Catalog(
+        models=[
+            model("Cheap Smart", 0.10, 0.20, 60, 200),
+            model("Cheap Dull", 0.10, 0.20, 60, 200),
+            model("Pricey Smart", 2.00, 6.00, 15, 200),
+        ]
+    )
+    benchmarks = {
+        "Cheap Smart": BenchmarkRecord(model_name="Cheap Smart", scores={"intelligence": 70.0}, source="seed"),
+        "Cheap Dull": BenchmarkRecord(model_name="Cheap Dull", scores={"intelligence": 40.0}, source="seed"),
+        "Pricey Smart": BenchmarkRecord(model_name="Pricey Smart", scores={"intelligence": 71.0}, source="seed"),
+    }
+    rows, _ = report.build_rows(catalog, benchmarks)
+    by_name = {row.model.name: row for row in rows}
+    assert by_name["Cheap Smart"].pareto is True
+    assert by_name["Cheap Dull"].pareto is False
+    assert by_name["Pricey Smart"].pareto is True
+    assert by_name["Cheap Smart"].tier == 1
+    assert by_name["Pricey Smart"].tier == 1
+    assert by_name["Cheap Dull"].tier == 2
+
+
 def test_tiers_group_close_scores():
     catalog, benchmarks = sample_catalog()
     rows, _ = report.build_rows(catalog, benchmarks)
