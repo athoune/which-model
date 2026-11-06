@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # A real `which-model refresh` output, kept in the repository because `data/`
 # itself is generated and gitignored: a fresh clone (or CI) has no live copy.
-# The files live in `fixtures/data/` to mirror the layout `load_catalog` expects.
+# The files live in `fixtures/data/` to mirror the layout `load_catalog` expects;
+# re-pin them with `make fixture` after a refresh.
 PINNED_DATA = Path(__file__).parent / "fixtures"
 
 
