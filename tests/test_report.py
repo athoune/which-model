@@ -205,3 +205,40 @@ def test_verbosity_view_shows_cost_sensitivity():
     output = _render("verbosity")
     assert "x2 out" in output
     assert "cost rise" in output
+
+
+def test_compact_source_tags_fit_their_header():
+    """A provenance tag must never widen the narrow table.
+
+    `mixed` and `override` are five and eight characters wide; a catalog that
+    happens to carry them used to push the compact layout past 80 columns.
+    """
+    for source in ("artificial_analysis", "seed", "override", "mixed", "not_found", None, "unheard-of"):
+        assert len(report._source_tag(source, compact=True)) <= len("src"), source
+
+    # The wide layout keeps the explicit wording: there is room for it.
+    assert report._source_tag("mixed") == "mixed"
+    assert report._source_tag("override") == "override"
+
+
+def test_compact_legend_explains_the_short_tags():
+    for tag in ("aa", "sd", "ovr", "n/a", "mix"):
+        assert tag in report.SOURCE_LEGEND_COMPACT, tag
+
+
+def test_compact_table_uses_the_short_tags():
+    """End to end: the compact table prints `mix`, not `mixed`."""
+    catalog, benchmarks = sample_catalog()
+    benchmarks["Cheap Great"] = BenchmarkRecord(
+        model_name="Cheap Great", scores={"coding": 70.0}, source="mixed"
+    )
+
+    rows, _baseline = report.build_rows(catalog, benchmarks)
+    stream = StringIO()
+    Console(file=stream, width=200, force_terminal=False).print(
+        report._build_budget_table(rows, compact=True)
+    )
+    compact = stream.getvalue()
+
+    assert "mix" in compact
+    assert "mixed" not in compact

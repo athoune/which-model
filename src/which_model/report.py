@@ -155,6 +155,14 @@ SOURCE_LEGEND = (
     "n/a = searched, nothing citable · mixed = several of these"
 )
 
+# In the narrow layout the source column has to fit its own three-character
+# header: a tag like "override" would otherwise widen the table past 80 columns
+# on a catalog the width test never saw. Shorter codes, spelled out above.
+SOURCE_LEGEND_COMPACT = (
+    "source (narrow): aa = Artificial Analysis · sd = curated seed · ovr = human/agent · "
+    "n/a = searched, nothing citable · mix = several of these"
+)
+
 
 def _legend(view: str, baseline: int | None, compact: bool = False) -> Panel:
     entries = {
@@ -172,7 +180,7 @@ def _legend(view: str, baseline: int | None, compact: bool = False) -> Panel:
     if compact:
         lines.append("narrow terminal: the 5h and /mo quotas are in kilo-tasks, k = 1000 tasks")
         lines.append("")
-    lines.append(SOURCE_LEGEND)
+    lines.append(SOURCE_LEGEND_COMPACT if compact else SOURCE_LEGEND)
     if baseline is not None:
         lines.append(f"verbosity baseline: 100 on the index = {baseline} output tokens per task")
     return Panel(Group(*[Text.from_markup(line) for line in lines]), title="Legend", border_style="dim")
@@ -195,7 +203,16 @@ def _task_cost(value: float | None) -> str:
     return f"{cents:.2f}¢"
 
 
-def _source_tag(source: str | None) -> str:
+def _source_tag(source: str | None, *, compact: bool = False) -> str:
+    if compact:
+        return {
+            "artificial_analysis": "aa",
+            "seed": "sd",
+            "override": "ovr",
+            "mixed": "mix",
+            "not_found": "n/a",
+            None: "—",
+        }.get(source, (source or "—")[:3])
     return {
         "artificial_analysis": "aa",
         "seed": "seed",
@@ -322,7 +339,7 @@ def _build_budget_table(rows: list[Row], *, compact: bool) -> Table:
             _tasks(row.tasks_5h, unlimited, compact=compact),
             _tasks(row.tasks_month, unlimited, compact=compact),
             _score(row, "coding"),
-            _source_tag(row.benchmark.source if row.benchmark else None),
+            _source_tag(row.benchmark.source if row.benchmark else None, compact=compact),
         )
     return table
 
@@ -411,7 +428,7 @@ def _build_perf_table(rows: list[Row], *, compact: bool) -> Table:
             _score(row, "agentic"),
             _task_cost(row.cost),
             _tasks(row.tasks_month, unlimited, compact=compact),
-            _source_tag(row.benchmark.source),
+            _source_tag(row.benchmark.source, compact=compact),
         )
     return table
 
