@@ -7,11 +7,10 @@ fixtures exist only to exercise the rendering and ranking logic.
 from __future__ import annotations
 
 from io import StringIO
-from pathlib import Path
 
 from rich.console import Console
 
-from which_model import pipeline, report
+from which_model import report
 from which_model.schemas import (
     BenchmarkRecord,
     Catalog,
@@ -141,15 +140,15 @@ def test_narrow_terminal_switches_quotas_to_kilo_tasks():
     assert "kilo-tasks" not in wide
 
 
-def test_budget_fits_an_eighty_column_terminal():
+def test_budget_fits_an_eighty_column_terminal(shipped_catalog):
     """The compact layout has to hold a whole 80-column terminal, not shrink to it.
 
-    Deliberately run on the shipped catalog: synthetic model names are far too
-    short to expose the widths this behaviour is about. If a new catalog value
-    ever widens a column past 80, this is the test that says so.
+    Deliberately run on a real `refresh` output: hand-made models carry values
+    too tame to expose the widths this behaviour is about. If a new catalog
+    value ever widens a column past 80, this is the test that says so.
     """
-    root = Path(__file__).resolve().parent.parent
-    rows, _baseline = report.build_rows(pipeline.load_catalog(root), pipeline.load_benchmarks(root))
+    catalog, benchmarks = shipped_catalog
+    rows, _baseline = report.build_rows(catalog, benchmarks)
 
     narrow = report._build_budget_table(rows, compact=True)
     assert report._natural_width(narrow) <= 80
@@ -159,8 +158,11 @@ def test_budget_fits_an_eighty_column_terminal():
     # everything printed above the legend panel is the table itself
     table_only = stream.getvalue().split("Legend")[0]
     assert "¢/task" in table_only  # header survives, no '¢/ta…'
-    assert "227k" in table_only  # widest quota is the compacted one
-    assert "226,586" not in table_only
+
+    # The widest quota must be the compacted one: "227k", never "226,586".
+    widest = max(row.tasks_month for row in rows if row.tasks_month is not None)
+    assert report._kilo_tasks(widest) in table_only
+    assert f"{widest:,.0f}" not in table_only
 
 
 def test_zero_baseline_does_not_crash():
