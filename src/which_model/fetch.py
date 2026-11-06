@@ -76,7 +76,20 @@ class Fetcher:
         }
         meta_path.write_text(json.dumps(meta), encoding="utf-8")
 
-    def get(self, url: str, *, force: bool = False, headers: dict[str, str] | None = None) -> Fetched:
+    def get(
+        self,
+        url: str,
+        *,
+        force: bool = False,
+        headers: dict[str, str] | None = None,
+        allow_stale: bool = True,
+    ) -> Fetched:
+        """Fetch ``url`` through the cache.
+
+        With ``allow_stale=False`` a network error is re-raised instead of
+        falling back to the cached copy, which lets callers try an alternate
+        URL before settling for stale content.
+        """
         cached = self._read_cache(url)
         if cached is not None and not force:
             age = datetime.now(UTC) - cached.fetched_at
@@ -95,7 +108,7 @@ class Fetcher:
             )
             response.raise_for_status()
         except httpx.HTTPError:
-            if cached is not None:
+            if cached is not None and allow_stale:
                 cached.stale = True
                 return cached
             raise

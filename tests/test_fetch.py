@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 
 from which_model.fetch import Fetcher
@@ -81,3 +82,51 @@ def test_incomplete_meta_is_treated_as_miss(meta: dict, description: str, tmp_pa
 
     fetcher = Fetcher(tmp_path, ttl=timedelta(hours=1))
     assert fetcher._read_cache(url) is None, description
+
+
+def test_allow_stale_false_surfaces_the_network_error(tmp_path: Path, monkeypatch) -> None:
+    """Callers trying alternate URLs must see the failure, not an old copy."""
+    url = "https://example.com/data"
+    _write(
+        url,
+        tmp_path,
+        meta={
+            "url": url,
+            "fetched_at": datetime(2020, 1, 1, tzinfo=UTC).isoformat(),
+            "sha256": "abc",
+        },
+        body="stale",
+    )
+    fetcher = Fetcher(tmp_path, ttl=timedelta(hours=1))
+
+    def explode(*args, **kwargs):
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(httpx, "get", explode)
+
+    with pytest.raises(httpx.HTTPError):
+        fetcher.get(url, allow_stale=False)
+
+
+def test_allow_stale_true_keeps_serving_the_cache(tmp_path: Path, monkeypatch) -> None:
+    url = "https://example.com/data"
+    _write(
+        url,
+        tmp_path,
+        meta={
+            "url": url,
+            "fetched_at": datetime(2020, 1, 1, tzinfo=UTC).isoformat(),
+            "sha256": "abc",
+        },
+        body="stale",
+    )
+    fetcher = Fetcher(tmp_path, ttl=timedelta(hours=1))
+
+    def explode(*args, **kwargs):
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(httpx, "get", explode)
+
+    fetched = fetcher.get(url)
+    assert fetched.text == "stale"
+    assert fetched.stale is True
